@@ -21,6 +21,7 @@ pub const Canvas = struct {
     /// Initializes the in-memory Canvas by creating the HTMLCanvasElement
     /// and fetching its 2D rendering context from the browser.
     pub fn init(width: u32, height: u32, pixels: []u8, parent_id: []const u8) Canvas {
+        std.debug.assert(pixels.len >= width * height * 4);
         const parent_handle = dom.getElementById(parent_id);
         
         // Use unified low-level element creation

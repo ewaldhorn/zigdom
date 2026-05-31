@@ -29,13 +29,6 @@
   }
 
   // ---------------------------------------------------------------
-  // Callback Table
-  // Zig registers callback functions by ID. JS invokes them through
-  // the exported `zig_invoke_callback(id)`.
-  // ---------------------------------------------------------------
-  const callbacks = [];
-
-  // ---------------------------------------------------------------
   // String helpers
   // ---------------------------------------------------------------
   function readStr(mem, ptr, len) {
@@ -58,6 +51,7 @@
       // create a Memory here — instead we'll grab it from exports after
       // instantiation.
       let wasmMemory;
+      let wasmExports;
 
       const importObject = {
         env: {
@@ -167,7 +161,7 @@
 
           dom_add_event_listener: (elem, eventPtr, eventLen, cbId) => {
             const event = readStr(wasmMemory, eventPtr, eventLen);
-            jsValues[elem].addEventListener(event, function () {
+            jsValues[elem].addEventListener(event, () => {
               wasmExports.zig_invoke_callback(cbId);
             });
           },
@@ -233,11 +227,20 @@
         },
       };
 
-      // Fetch and instantiate the WASM module
-      const response = await fetch(wasmUrl);
-      const bytes = await response.arrayBuffer();
-      const wasm = await WebAssembly.instantiate(bytes, importObject);
-      const wasmExports = wasm.instance.exports;
+      // Fetch and instantiate the WASM module using streaming compilation if available
+      let wasm;
+      if (typeof WebAssembly.instantiateStreaming === "function") {
+        wasm = await WebAssembly.instantiateStreaming(
+          fetch(wasmUrl),
+          importObject,
+        );
+      } else {
+        const response = await fetch(wasmUrl);
+        const bytes = await response.arrayBuffer();
+        wasm = await WebAssembly.instantiate(bytes, importObject);
+      }
+
+      wasmExports = wasm.instance.exports;
 
       // Grab the WASM-exported memory — all import functions reference
       // the `wasmMemory` variable by closure, so they'll now use the
