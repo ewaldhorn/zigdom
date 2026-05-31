@@ -1,0 +1,44 @@
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <script src="zigdom.js"></script>
+    <title>Zigdom Demo</title>
+    <link href="styles.css" rel="stylesheet" />
+  </head>
+  <body>
+    <header>
+      <h1 id="title">Zigdom — The Demo</h1>
+    </header>
+    <nav>
+      <div id="controls">
+        <button id="addSomethingButton" type="button">Add Something</button>
+        <button id="clearAsideButton" type="button">Clear Aside</button>
+      </div>
+    </nav>
+    <hr />
+    <section>
+      <div id="loading">Loading ...</div>
+      <div id="application" class="application"></div>
+    </section>
+    <hr />
+    <footer id="information">
+      <p>
+        Zigdom is a utility library for my Web and Web Assembly (WASM) projects.
+      </p>
+      <p>
+        Source code:
+        <a href="https://github.com/ewaldhorn/zigdom">
+            https://github.com/ewaldhorn/zigdom
+        </a>
+      </p>
+    </footer>
+    <script type="module" defer>
+      "use strict";
+
+      ZigDom.instantiate("zigdom.wasm").catch(function (err) {
+        console.error("Zigdom failed to load:", err);
+        document.getElementById("loading").innerText = "Failed to load WASM: " + err.message;
+      });
+    </script>
+  </body>
+</html>
