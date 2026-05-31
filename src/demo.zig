@@ -23,6 +23,8 @@ var boo_counter: u32 = 0;
 var application_container: dom.Handle = dom.INVALID;
 var article_element: dom.Handle = dom.INVALID;
 var aside_element: dom.Handle = dom.INVALID;
+var canvas_one_time: u32 = 0;
+var grid_offset: f64 = 0.0;
 
 // ------------------------------------------------------------------------------------------------
 // CSS class / size options for addRandomParagraph
@@ -140,12 +142,17 @@ fn onClearAsideClick() void {
 // ------------------------------------------------------------------------------------------------
 fn onRefreshCanvasOneClick() void {
     if (!is_ready) return;
-    performDemoOnCanvasOne();
+    current_theme_idx = @mod(current_theme_idx + 1, themes.len);
 }
 
 // ------------------------------------------------------------------------------------------------
 fn onAnimationTick() void {
     if (!is_ready) return;
+    canvas_one_time +%= 1;
+    grid_offset += 0.025;
+    if (grid_offset >= 1.0) grid_offset -= 1.0;
+
+    performDemoOnCanvasOne();
     updateCanvasTwo();
 }
 
@@ -227,222 +234,295 @@ fn setTitle() void {
 // ------------------------------------------------------------------------------------------------
 
 // ------------------------------------------------------------------------------------------------
-// Palette — all neon on near-black.
+// Theme definitions for Canvas One
 // ------------------------------------------------------------------------------------------------
 
 // ------------------------------------------------------------------------------------------------
-const sw_bg = colour.Colour{ .r = 5, .g = 5, .b = 16, .a = 255 };
-const sw_panel = colour.Colour{ .r = 12, .g = 12, .b = 36, .a = 255 };
-const sw_cyan = colour.Colour{ .r = 0, .g = 240, .b = 220, .a = 255 };
-const sw_magenta = colour.Colour{ .r = 255, .g = 0, .b = 180, .a = 255 };
-const sw_yellow = colour.Colour{ .r = 255, .g = 230, .b = 0, .a = 255 };
-const sw_gold = colour.Colour{ .r = 255, .g = 180, .b = 30, .a = 255 };
-const sw_violet = colour.Colour{ .r = 160, .g = 0, .b = 255, .a = 255 };
+const Theme = struct {
+    bg: colour.Colour,
+    panel: colour.Colour,
+    cyan: colour.Colour,
+    magenta: colour.Colour,
+    yellow: colour.Colour,
+    violet: colour.Colour,
+    sun_start: colour.Colour,
+    sun_end: colour.Colour,
+    glow_start_str: []const u8,
+    glow_mid_str: []const u8,
+    glow_end_str: []const u8,
+};
+
+// ------------------------------------------------------------------------------------------------
+var current_theme_idx: usize = 0;
+
+// ------------------------------------------------------------------------------------------------
+const themes = [_]Theme{
+    .{
+        .bg = colour.Colour{ .r = 5, .g = 5, .b = 16, .a = 255 },
+        .panel = colour.Colour{ .r = 12, .g = 12, .b = 36, .a = 255 },
+        .cyan = colour.Colour{ .r = 0, .g = 240, .b = 220, .a = 255 },
+        .magenta = colour.Colour{ .r = 255, .g = 0, .b = 180, .a = 255 },
+        .yellow = colour.Colour{ .r = 255, .g = 230, .b = 0, .a = 255 },
+        .violet = colour.Colour{ .r = 160, .g = 0, .b = 255, .a = 255 },
+        .sun_start = colour.Colour{ .r = 255, .g = 230, .b = 0, .a = 255 },
+        .sun_end = colour.Colour{ .r = 255, .g = 0, .b = 180, .a = 255 },
+        .glow_start_str = "rgba(255,0,180,0.12)",
+        .glow_mid_str = "rgba(255,180,30,0.22)",
+        .glow_end_str = "rgba(255,230,0,0.32)",
+    },
+    .{
+        .bg = colour.Colour{ .r = 12, .g = 4, .b = 4, .a = 255 },
+        .panel = colour.Colour{ .r = 24, .g = 8, .b = 8, .a = 255 },
+        .cyan = colour.Colour{ .r = 255, .g = 120, .b = 0, .a = 255 },
+        .magenta = colour.Colour{ .r = 255, .g = 40, .b = 0, .a = 255 },
+        .yellow = colour.Colour{ .r = 255, .g = 200, .b = 0, .a = 255 },
+        .violet = colour.Colour{ .r = 100, .g = 0, .b = 0, .a = 255 },
+        .sun_start = colour.Colour{ .r = 255, .g = 200, .b = 0, .a = 255 },
+        .sun_end = colour.Colour{ .r = 255, .g = 40, .b = 0, .a = 255 },
+        .glow_start_str = "rgba(255,40,0,0.12)",
+        .glow_mid_str = "rgba(255,120,0,0.22)",
+        .glow_end_str = "rgba(255,200,0,0.32)",
+    },
+    .{
+        .bg = colour.Colour{ .r = 20, .g = 10, .b = 30, .a = 255 },
+        .panel = colour.Colour{ .r = 40, .g = 20, .b = 60, .a = 255 },
+        .cyan = colour.Colour{ .r = 0, .g = 255, .b = 255, .a = 255 },
+        .magenta = colour.Colour{ .r = 255, .g = 105, .b = 180, .a = 255 },
+        .yellow = colour.Colour{ .r = 255, .g = 255, .b = 150, .a = 255 },
+        .violet = colour.Colour{ .r = 138, .g = 43, .b = 226, .a = 255 },
+        .sun_start = colour.Colour{ .r = 0, .g = 255, .b = 255, .a = 255 },
+        .sun_end = colour.Colour{ .r = 255, .g = 105, .b = 180, .a = 255 },
+        .glow_start_str = "rgba(255,105,180,0.12)",
+        .glow_mid_str = "rgba(138,43,226,0.22)",
+        .glow_end_str = "rgba(0,255,255,0.32)",
+    },
+    .{
+        .bg = colour.Colour{ .r = 2, .g = 8, .b = 4, .a = 255 },
+        .panel = colour.Colour{ .r = 4, .g = 16, .b = 8, .a = 255 },
+        .cyan = colour.Colour{ .r = 0, .g = 255, .b = 100, .a = 255 },
+        .magenta = colour.Colour{ .r = 0, .g = 180, .b = 50, .a = 255 },
+        .yellow = colour.Colour{ .r = 200, .g = 255, .b = 200, .a = 255 },
+        .violet = colour.Colour{ .r = 0, .g = 80, .b = 20, .a = 255 },
+        .sun_start = colour.Colour{ .r = 200, .g = 255, .b = 200, .a = 255 },
+        .sun_end = colour.Colour{ .r = 0, .g = 180, .b = 50, .a = 255 },
+        .glow_start_str = "rgba(0,180,50,0.12)",
+        .glow_mid_str = "rgba(0,80,20,0.22)",
+        .glow_end_str = "rgba(0,255,100,0.32)",
+    },
+};
 
 // ------------------------------------------------------------------------------------------------
 fn performDemoOnCanvasOne() void {
     const w: i32 = @intCast(canvasOne.width);
     const h: i32 = @intCast(canvasOne.height);
+    const horizon = @divTrunc(h, 2) + 50;
+    const active_theme = themes[current_theme_idx];
 
     // Cross-seed colour PRNG from the demo PRNG so each refresh looks different.
     colour.seed(@as(u64, nextRandom()) | 1);
 
-    canvasOne.clearScreen(sw_bg);
-    canvasOne.colourRectangle(8, 8, w - 16, h - 16, 2, sw_panel);
+    canvasOne.clearScreen(active_theme.bg);
+    canvasOne.colourRectangle(8, 8, w - 16, h - 16, 2, active_theme.panel);
 
-    drawSynthwaveLines(w, h);
-
-    // Overlay panel outlines
-    canvasOne.colourRectangle(10, 10, @divTrunc(w, 2) - 14, @divTrunc(h, 2) - 14, 1, sw_violet);
-    canvasOne.colourRectangle(w - 132, h - 132, 122, 122, 1, sw_cyan);
-
-    drawNeonPixelGrid(w, h);
-    drawGradientFilledRectangles(h);
-    drawNeonOutlineRectangles(w);
-    drawSynthwaveCircles(w, h);
-    drawRainbowSpiral(w, h);
+    drawStarfield(w, horizon, canvas_one_time, active_theme);
+    drawRetroSun(@divTrunc(w, 2), horizon - 20, 85, active_theme);
+    drawMountainSilhouettes(w, horizon, active_theme);
+    drawLaserGrid(w, h, horizon, grid_offset, active_theme);
+    drawVectorShip(@divTrunc(w, 2), h - 55, canvas_one_time, active_theme);
 
     canvasOne.render();
 
-    drawGlowingHalos(canvasOne.getContext2D(), w, h);
+    drawSunGlow(canvasOne.getContext2D(), w, horizon - 20, canvas_one_time, active_theme);
 }
 
 // ------------------------------------------------------------------------------------------------
-fn drawSynthwaveLines(w: i32, h: i32) void {
-    canvasOne.colourLine(0, 0, w, h, sw_magenta);
-    canvasOne.colourLine(@divTrunc(w, 2), @divTrunc(h, 2), w, 0, sw_cyan);
-
-    // Concentric inset rectangles, alternating cyan / violet
+fn drawStarfield(w: i32, horizon: i32, time: u32, t: Theme) void {
+    colour.seed(999);
     var i: i32 = 0;
-    while (i < 60) : (i += 5) {
-        const c = if (@mod(@divTrunc(i, 5), 2) == 0) sw_cyan else sw_violet;
-        canvasOne.colourRectangle(
-            40 + i,
-            10 + @divTrunc(h, 2) + i,
-            @divTrunc(w, 2) - i * 2 - 80,
-            h - 30 - @divTrunc(h, 2) - i * 2,
-            1,
-            c,
-        );
-    }
-}
+    while (i < 90) : (i += 1) {
+        const rx = @as(i32, @intCast(colour.randomColour().r)) * 3 + @mod(@as(i32, @intCast(colour.randomColour().g)), 50);
+        const ry = @mod(@as(i32, @intCast(colour.randomColour().b)), horizon - 30);
+        if (rx < 12 or rx >= w - 12 or ry < 12) continue;
 
-// ------------------------------------------------------------------------------------------------
-fn drawNeonPixelGrid(w: i32, h: i32) void {
-    const size: i32 = 50;
-    var x: i32 = 0;
-    while (x < size) : (x += 5) {
-        var y: i32 = 0;
-        while (y < size) : (y += 5) {
-            canvasOne.colourPutPixel(
-                @divTrunc(w, 2) - size + x,
-                @divTrunc(h, 2) - size + y,
-                sw_cyan,
-            );
-        }
-    }
-}
+        const r_val = colour.randomColour().g;
+        const twinkle_phase = @mod(r_val +% @as(u8, @intCast(@mod(time, 256))), 12);
+        if (twinkle_phase == 0) continue;
 
-// ------------------------------------------------------------------------------------------------
-fn drawGradientFilledRectangles(h: i32) void {
-    // Column of magenta→violet gradient rects
-    var i: u8 = 0;
-    while (i < 15) : (i += 1) {
-        const step: i32 = @intCast(i);
-        canvasOne.colourFilledRectangle(
-            15,
-            10 + @divTrunc(h, 2) + step * 17,
-            15,
-            15,
-            colour.Colour{ .r = 255 - i * 6, .g = 0, .b = 100 + i * 10, .a = 255 },
-        );
-    }
-
-    // Dense grid of random neon rects — different every refresh
-    var rx: i32 = 0;
-    while (rx < 40) : (rx += 1) {
-        var ry: i32 = 0;
-        while (ry < 40) : (ry += 1) {
-            canvasOne.colourFilledRectangle(20 + rx * 4, 20 + ry * 4, 20, 20, colour.randomColour());
-        }
-    }
-}
-
-// ------------------------------------------------------------------------------------------------
-fn drawNeonOutlineRectangles(w: i32) void {
-    var row: i32 = 0;
-    while (row < 4) : (row += 1) {
-        var col: i32 = 0;
-        while (col < 10) : (col += 1) {
-            canvasOne.colourRectangle(
-                10 + @divTrunc(w, 2) + col * 15,
-                20 + 20 * row,
-                10,
-                10,
-                1,
-                sw_yellow,
-            );
-        }
-    }
-}
-
-// ------------------------------------------------------------------------------------------------
-fn drawSynthwaveCircles(w: i32, h: i32) void {
-    // Worm of filled circles — random neon each refresh
-    var i: i32 = 0;
-    while (i < 24) : (i += 1) {
-        canvasOne.colourFilledCircle(i * 4 + 50 + @divTrunc(w, 4), 60, 40, colour.randomColour());
-    }
-
-    // Concentric border rings — random colour each refresh
-    i = 0;
-    while (i < 5) : (i += 1) {
-        canvasOne.colourBorderCircle(
-            100 + @divTrunc(w, 4),
-            @divTrunc(h, 4),
-            20 + i * 6,
-            i + 1,
-            colour.randomColour(),
-        );
-    }
-
-    // Target rings — random colours each refresh
-    i = 6;
-    while (i < 60) : (i += 3) {
-        canvasOne.colourCircle(w - 70, h - 70, i, colour.randomColour());
-    }
-}
-
-// ------------------------------------------------------------------------------------------------
-fn drawRainbowSpiral(w: i32, h: i32) void {
-    var cx = @divTrunc(w, 4);
-    var cy = @divTrunc(h, 2) + @divTrunc(h, 4);
-    var px = cx;
-    var py = cy;
-    var direction: i32 = 0; // 0=east 1=south 2=west 3=north
-    var steps: i32 = 1;
-    var hue: u32 = 0;
-
-    var turn: i32 = 0;
-    while (turn < 32) : (turn += 1) {
-        var step: i32 = 0;
-        while (step < steps * 2) : (step += 1) {
-            px = cx;
-            py = cy;
-            switch (direction) {
-                0 => cx += 2,
-                1 => cy -= 2,
-                2 => cx -= 2,
-                3 => cy += 2,
-                else => {},
+        const dice = r_val % 8;
+        if (dice == 0) {
+            canvasOne.colourPutPixel(rx, ry, colour.Colour.white);
+            if (twinkle_phase > 2) {
+                canvasOne.colourPutPixel(rx - 1, ry, t.cyan);
+                canvasOne.colourPutPixel(rx + 1, ry, t.cyan);
+                canvasOne.colourPutPixel(rx, ry - 1, t.magenta);
+                canvasOne.colourPutPixel(rx, ry + 1, t.magenta);
             }
-            canvasOne.colourLine(px, py, cx, cy, rainbowColour(hue));
-            hue +%= 1;
+        } else if (dice < 3) {
+            canvasOne.colourPutPixel(rx, ry, t.magenta);
+        } else if (dice < 6) {
+            canvasOne.colourPutPixel(rx, ry, t.cyan);
+        } else {
+            canvasOne.colourPutPixel(rx, ry, colour.Colour.white);
         }
-        direction = @mod(direction + 1, 4);
-        steps += 1;
     }
 }
 
 // ------------------------------------------------------------------------------------------------
-/// Maps a wrapping index to a smooth 6-segment rainbow colour.
-/// Each segment covers ~43 steps giving a full cycle per 256 indices.
-fn rainbowColour(idx: u32) colour.Colour {
-    const t: u8 = @truncate(idx); // implicit mod 256
-    const section = t / 43;
-    const prog = t % 43;
-    // prog * 6 ≤ 42 * 6 = 252, safe to @truncate to u8
-    const p: u8 = @truncate(@as(u32, prog) * 6);
-    return switch (section) {
-        0 => .{ .r = 255, .g = p, .b = 0, .a = 255 }, // red→yellow
-        1 => .{ .r = 255 - p, .g = 255, .b = 0, .a = 255 }, // yellow→green
-        2 => .{ .r = 0, .g = 255, .b = p, .a = 255 }, // green→cyan
-        3 => .{ .r = 0, .g = 255 - p, .b = 255, .a = 255 }, // cyan→blue
-        4 => .{ .r = p, .g = 0, .b = 255, .a = 255 }, // blue→magenta
-        else => .{ .r = 255, .g = 0, .b = 255 - p, .a = 255 }, // magenta→red
-    };
+fn drawRetroSun(cx: i32, cy: i32, r: i32, t: Theme) void {
+    var dy = -r;
+    while (dy <= r) : (dy += 1) {
+        const y = cy + dy;
+        const r_f: f64 = @floatFromInt(r);
+        const dy_f: f64 = @floatFromInt(dy);
+        const chord: i32 = @intFromFloat(@sqrt(r_f * r_f - dy_f * dy_f));
+
+        if (dy > 0) {
+            const val = @mod(dy, 12);
+            if (val < @divTrunc(dy, 6) + 1) {
+                continue;
+            }
+        }
+
+        const ratio = @as(f32, @floatFromInt(dy + r)) / @as(f32, @floatFromInt(2 * r));
+        const red: u8 = @intFromFloat(@as(f32, @floatFromInt(t.sun_start.r)) * (1.0 - ratio) + @as(f32, @floatFromInt(t.sun_end.r)) * ratio);
+        const green: u8 = @intFromFloat(@as(f32, @floatFromInt(t.sun_start.g)) * (1.0 - ratio) + @as(f32, @floatFromInt(t.sun_end.g)) * ratio);
+        const blue: u8 = @intFromFloat(@as(f32, @floatFromInt(t.sun_start.b)) * (1.0 - ratio) + @as(f32, @floatFromInt(t.sun_end.b)) * ratio);
+        const c = colour.Colour{ .r = red, .g = green, .b = blue, .a = 255 };
+
+        canvasOne.colourLine(cx - chord, y, cx + chord, y, c);
+    }
 }
 
 // ------------------------------------------------------------------------------------------------
-fn drawGlowingHalos(ctx: dom.Context2D, w: i32, h: i32) void {
-    const cx: f64 = @floatFromInt(w - 100);
-    const cy: f64 = @floatFromInt(@divTrunc(h, 2));
+fn drawMountainSilhouettes(w: i32, horizon: i32, t: Theme) void {
+    const bg_pts = [_][2]i32{
+        .{ 8, horizon },
+        .{ 120, horizon - 75 },
+        .{ 240, horizon - 25 },
+        .{ 350, horizon - 105 },
+        .{ 480, horizon - 45 },
+        .{ 620, horizon - 95 },
+        .{ 710, horizon - 35 },
+        .{ w - 8, horizon },
+    };
+
+    const fg_pts = [_][2]i32{
+        .{ 8, horizon },
+        .{ 90, horizon - 40 },
+        .{ 180, horizon - 15 },
+        .{ 290, horizon - 65 },
+        .{ 390, horizon - 30 },
+        .{ 510, horizon - 75 },
+        .{ 640, horizon - 20 },
+        .{ 730, horizon - 50 },
+        .{ w - 8, horizon },
+    };
+
+    var idx: usize = 0;
+    while (idx < bg_pts.len - 1) : (idx += 1) {
+        const p1 = bg_pts[idx];
+        const p2 = bg_pts[idx + 1];
+        var x = p1[0];
+        while (x <= p2[0]) : (x += 1) {
+            const ratio = @as(f32, @floatFromInt(x - p1[0])) / @as(f32, @floatFromInt(p2[0] - p1[0]));
+            const y: i32 = @intFromFloat((1.0 - ratio) * @as(f32, @floatFromInt(p1[1])) + ratio * @as(f32, @floatFromInt(p2[1])));
+            canvasOne.colourLine(x, y + 1, x, horizon, t.bg);
+        }
+    }
+
+    idx = 0;
+    while (idx < bg_pts.len - 1) : (idx += 1) {
+        canvasOne.colourLine(bg_pts[idx][0], bg_pts[idx][1], bg_pts[idx + 1][0], bg_pts[idx + 1][1], t.violet);
+    }
+
+    idx = 0;
+    while (idx < fg_pts.len - 1) : (idx += 1) {
+        const p1 = fg_pts[idx];
+        const p2 = fg_pts[idx + 1];
+        var x = p1[0];
+        while (x <= p2[0]) : (x += 1) {
+            const ratio = @as(f32, @floatFromInt(x - p1[0])) / @as(f32, @floatFromInt(p2[0] - p1[0]));
+            const y: i32 = @intFromFloat((1.0 - ratio) * @as(f32, @floatFromInt(p1[1])) + ratio * @as(f32, @floatFromInt(p2[1])));
+            canvasOne.colourLine(x, y + 1, x, horizon, t.bg);
+        }
+    }
+
+    idx = 0;
+    while (idx < fg_pts.len - 1) : (idx += 1) {
+        canvasOne.colourLine(fg_pts[idx][0], fg_pts[idx][1], fg_pts[idx + 1][0], fg_pts[idx + 1][1], t.cyan);
+    }
+}
+
+// ------------------------------------------------------------------------------------------------
+fn drawLaserGrid(w: i32, h: i32, horizon: i32, scroll_offset: f64, t: Theme) void {
+    var x: i32 = -120;
+    while (x <= w + 120) : (x += 35) {
+        canvasOne.colourLine(@divTrunc(w, 2), horizon, x, h, t.violet);
+        canvasOne.colourLine(@divTrunc(w, 2), horizon + 2, x, h, t.cyan);
+    }
+
+    var i: f64 = 0.0;
+    while (true) {
+        const exponent = i + scroll_offset;
+        const dist = 6.0 * std.math.pow(f64, 1.25, exponent);
+        const y = horizon + @as(i32, @intCast(@as(i64, @intFromFloat(dist))));
+        if (y >= h - 8) break;
+        if (y >= horizon + 8) {
+            canvasOne.colourLine(10, y, w - 10, y, t.violet);
+            canvasOne.colourLine(10, y, w - 10, y, t.magenta);
+        }
+        i += 1.0;
+    }
+}
+
+// ------------------------------------------------------------------------------------------------
+fn drawVectorShip(cx: i32, cy: i32, time: u32, t: Theme) void {
+    const time_f = @as(f32, @floatFromInt(time));
+    const bob_y = @as(i32, @intFromFloat(4.0 * std.math.sin(time_f * 0.06)));
+    const sway_x = @as(i32, @intFromFloat(5.0 * std.math.cos(time_f * 0.04)));
+
+    const scx = cx + sway_x;
+    const scy = cy + bob_y;
+
+    const flame_len = @as(i32, @intFromFloat(26.0 + 4.0 * std.math.sin(time_f * 0.25)));
+
+    canvasOne.colourLine(scx - 8, scy + 12, scx, scy + flame_len, t.cyan);
+    canvasOne.colourLine(scx + 8, scy + 12, scx, scy + flame_len, t.cyan);
+    canvasOne.colourLine(scx - 8, scy + 12, scx + 8, scy + 12, t.cyan);
+
+    canvasOne.colourLine(scx - 35, scy + 10, scx + 35, scy + 10, t.magenta);
+    canvasOne.colourLine(scx - 35, scy + 10, scx - 12, scy - 20, t.magenta);
+    canvasOne.colourLine(scx + 35, scy + 10, scx + 12, scy - 20, t.magenta);
+
+    canvasOne.colourLine(scx - 12, scy - 20, scx, scy - 40, t.yellow);
+    canvasOne.colourLine(scx + 12, scy - 20, scx, scy - 40, t.yellow);
+    canvasOne.colourLine(scx - 12, scy - 20, scx + 12, scy - 20, t.yellow);
+
+    canvasOne.colourLine(scx - 6, scy - 10, scx, scy - 25, t.cyan);
+    canvasOne.colourLine(scx + 6, scy - 10, scx, scy - 25, t.cyan);
+    canvasOne.colourLine(scx - 6, scy - 10, scx + 6, scy - 10, t.cyan);
+}
+
+// ------------------------------------------------------------------------------------------------
+fn drawSunGlow(ctx: dom.Context2D, w: i32, cy: i32, time: u32, t: Theme) void {
+    const cx_f: f64 = @floatFromInt(@divTrunc(w, 2));
+    const cy_f: f64 = @floatFromInt(cy);
+    const time_f = @as(f64, @floatFromInt(time));
+    const pulse = 3.0 * std.math.sin(time_f * 0.05);
 
     ctx.beginPath();
-    ctx.fillStyle("rgba(255,0,180,0.18)");
-    ctx.arc(cx, cy, 70.0, 0.0, 6.2832, false);
+    ctx.fillStyle(t.glow_start_str);
+    ctx.arc(cx_f, cy_f, 130.0 + pulse, 0.0, 6.2832, false);
     ctx.fill();
+
     ctx.beginPath();
-    ctx.fillStyle("rgba(0,240,220,0.28)");
-    ctx.arc(cx, cy, 48.0, 0.0, 6.2832, false);
+    ctx.fillStyle(t.glow_mid_str);
+    ctx.arc(cx_f, cy_f, 95.0 - pulse, 0.0, 6.2832, false);
     ctx.fill();
+
     ctx.beginPath();
-    ctx.fillStyle("rgba(255,180,30,0.55)");
-    ctx.arc(cx, cy, 26.0, 0.0, 6.2832, false);
-    ctx.fill();
-    ctx.beginPath();
-    ctx.fillStyle("rgba(255,60,200,0.90)");
-    ctx.arc(cx, cy, 10.0, 0.0, 6.2832, false);
+    ctx.fillStyle(t.glow_end_str);
+    ctx.arc(cx_f, cy_f, 50.0 + pulse, 0.0, 6.2832, false);
     ctx.fill();
 }
 
