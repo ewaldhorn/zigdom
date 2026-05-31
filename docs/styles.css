@@ -1,59 +1,196 @@
-body {
-  margin: auto;
-  padding: 0px;
-  max-width: 1200px;
-  min-width: 1200px;
-  font-family: Roboto, Helvetica, Arial;
-  background: #fbfbfb;
-  color: #999;
-  text-align: center;
-  padding: 10px;
+/* ============================================================
+   Zigdom Demo — Synthwave Dark Theme
+   ============================================================ */
+
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap');
+
+:root {
+  --bg:           #05050f;
+  --surface:      #0d0d22;
+  --border:       #1a1a40;
+  --glow-cyan:    #00f0dc;
+  --glow-magenta: #ff00b4;
+  --glow-violet:  #a000ff;
+  --glow-yellow:  #ffe600;
+  --text-primary: #e0e0ff;
+  --text-muted:   #666699;
+  --accent:       #00f0dc;
 }
 
-canvas {
-  max-width: 80%;
-  max-height: 80%;
-  margin: auto;
-  background-color: #103010ff;
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: 'Outfit', Roboto, Helvetica, Arial, sans-serif;
+  background: var(--bg);
+  color: var(--text-primary);
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 16px;
+  text-align: center;
+
+  /* Subtle grid scanline texture */
+  background-image:
+    linear-gradient(rgba(0,240,220,0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0,240,220,0.03) 1px, transparent 1px);
+  background-size: 40px 40px;
+}
+
+/* ---- Header ---- */
+h1 {
+  font-size: clamp(1.4rem, 4vw, 2.2rem);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  padding: 18px 0 10px;
+  background: linear-gradient(90deg, var(--glow-cyan), var(--glow-magenta));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  filter: drop-shadow(0 0 12px rgba(0,240,220,0.4));
+}
+
+/* ---- Nav / Controls ---- */
+nav {
+  margin: 8px 0;
 }
 
 #controls {
   display: none;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: center;
+  padding: 8px 0;
+}
+
+button {
+  font-family: inherit;
+  font-size: 0.85rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  padding: 8px 18px;
+  border-radius: 6px;
+  border: 1px solid var(--glow-cyan);
+  background: transparent;
+  color: var(--glow-cyan);
+  cursor: pointer;
+  transition: background 0.2s, box-shadow 0.2s, color 0.2s;
+}
+
+button:hover {
+  background: rgba(0,240,220,0.12);
+  box-shadow: 0 0 12px rgba(0,240,220,0.45);
+  color: #fff;
+}
+
+hr {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 14px 0;
+}
+
+/* ---- Application section (article + aside) ---- */
+#loading {
+  color: var(--text-muted);
+  padding: 16px;
+  font-style: italic;
 }
 
 #information {
   display: none;
+  color: var(--text-muted);
+  font-size: 0.82rem;
+  line-height: 1.6;
+  padding: 10px 0 6px;
 }
 
-#tinyCanvasDiv {
-  width: 100%;
+#information a {
+  color: var(--glow-cyan);
+  text-decoration: none;
+}
+#information a:hover {
+  text-decoration: underline;
+}
+
+.application {
   display: flex;
-  flex-direction: row;
+  flex-wrap: wrap;
+  gap: 12px;
   justify-content: center;
+  padding: 10px 0;
+}
+
+article, aside {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px 16px;
+  min-width: 180px;
+  flex: 1 1 200px;
+  max-width: 420px;
+  text-align: left;
+  font-size: 0.88rem;
+  color: var(--text-muted);
+  line-height: 1.6;
+}
+
+/* ---- Canvas containers ---- */
+.canvas-container {
+  display: flex;
+  flex-direction: column;
   align-items: center;
-  align-content: space-evenly;
+  justify-content: center;
+  margin: 12px auto;
+  padding: 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 0 24px rgba(0,240,220,0.07);
+  /* Allow the canvas to shrink on narrow screens */
+  max-width: 100%;
+  overflow: hidden;
 }
 
-.blue {
-  color: blue;
+/* Canvas elements created by Zig scale responsively */
+canvas {
+  max-width: 100%;
+  height: auto;
+  display: block;
+  border-radius: 4px;
+  image-rendering: pixelated;
 }
 
-.red {
-  color: red;
+/* Physics canvas — crosshair cursor, extra neon glow hint */
+.canvas-interactive {
+  border-color: rgba(255,0,180,0.35);
+  box-shadow: 0 0 28px rgba(255,0,180,0.12);
+  position: relative;
 }
 
-.orange {
-  color: orange;
+.canvas-interactive canvas {
+  cursor: crosshair;
 }
 
-.large {
-  font-size: large;
+.canvas-hint {
+  font-size: 0.72rem;
+  color: var(--glow-magenta);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin-top: 6px;
+  opacity: 0.7;
+  transition: opacity 0.3s;
 }
 
-.larger {
-  font-size: larger;
+.canvas-interactive:hover .canvas-hint {
+  opacity: 1.0;
 }
 
-.xlarge {
-  font-size: x-large;
-}
+/* ---- Coloured text classes (used by addRandomParagraph) ---- */
+.blue   { color: #4488ff; }
+.red    { color: #ff4466; }
+.orange { color: #ff9900; }
+.large  { font-size: large; }
+.larger { font-size: larger; }
+.xlarge { font-size: x-large; }

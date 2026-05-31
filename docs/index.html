@@ -1,6 +1,8 @@
 <html>
   <head>
     <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="Zigdom — A Zig WebAssembly DOM utility library demo featuring canvas drawing primitives and interactive physics simulation." />
     <script src="zigdom.js"></script>
     <title>Zigdom Demo</title>
     <link href="styles.css" rel="stylesheet" />
@@ -21,7 +23,15 @@
       <div id="loading">Loading ...</div>
       <div id="application" class="application"></div>
     </section>
-    <div id="tinyCanvasDiv"></div>
+
+    <!-- Canvas One: static synthwave gallery -->
+    <div id="canvasOneDiv" class="canvas-container" title="Synthwave Gallery — click Refresh to redraw"></div>
+
+    <!-- Canvas Two: interactive ball physics -->
+    <div id="canvasTwoDiv" class="canvas-container canvas-interactive" title="Click or tap to push the balls!">
+      <div class="canvas-hint">Click or tap to push the balls!</div>
+    </div>
+
     <hr />
     <footer id="information">
       <p>

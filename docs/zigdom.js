@@ -249,6 +249,44 @@
 
       // Initialize: runs the demo
       wasmExports.zig_init();
+
+      // ---------------------------------------------------------------
+      // Touch / Click interaction for the physics canvas (canvas two).
+      // After zig_init, Zig has created the canvas elements.
+      // The physics canvas is the sole child of #canvasTwoDiv.
+      // ---------------------------------------------------------------
+      const canvasTwoDiv = document.getElementById("canvasTwoDiv");
+      if (canvasTwoDiv) {
+        const physicsCanvas = canvasTwoDiv.querySelector("canvas");
+        if (physicsCanvas) {
+          // Show controls as flex (CSS sets display:none by default, Zig calls show() which sets block)
+          // Override to flex so the buttons wrap nicely.
+          const controls = document.getElementById("controls");
+          if (controls) controls.style.display = "flex";
+
+          function handleInteraction(clientX, clientY) {
+            const rect = physicsCanvas.getBoundingClientRect();
+            // Map from CSS pixels to canvas pixel space
+            const scaleX = physicsCanvas.width  / rect.width;
+            const scaleY = physicsCanvas.height / rect.height;
+            const x = Math.round((clientX - rect.left) * scaleX);
+            const y = Math.round((clientY - rect.top)  * scaleY);
+            wasmExports.zig_set_interaction(x, y);
+            wasmExports.zig_invoke_callback(4);
+          }
+
+          physicsCanvas.addEventListener("mousedown", (e) => {
+            e.preventDefault();
+            handleInteraction(e.clientX, e.clientY);
+          });
+
+          physicsCanvas.addEventListener("touchstart", (e) => {
+            e.preventDefault();
+            const touch = e.touches[0];
+            handleInteraction(touch.clientX, touch.clientY);
+          }, { passive: false });
+        }
+      }
     },
   };
 })();

@@ -1,18 +1,20 @@
 body {
-  background-color: #cfcfcf;
+  background-color: #05050f;
 }
 
 body h1 {
-  color: #444444;
+  /* gradient applied via styles.css; no override needed */
+  color: #e0e0ff;
 }
 
 #information {
-  color: #838383;
+  color: #666699;
 }
 
 .application {
   display: flex;
   flex-direction: row;
+  flex-wrap: wrap;
 }
 
 @media (max-width: 700px) {
@@ -24,10 +26,12 @@ body h1 {
 
 .application article {
   flex-grow: 5;
-  border: 1px solid #444444;
+  border: 1px solid #1a1a40;
+  color: #999acc;
 }
 
 .application aside {
-  border: 1px solid #939393;
+  border: 1px solid #1a1a40;
   flex-grow: 2;
+  color: #999acc;
 }
