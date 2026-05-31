@@ -172,6 +172,55 @@
             });
           },
 
+          // --- Canvas & Context 2D ---
+
+          dom_canvas_create: (parent, width, height) => {
+            const parentEl = jsValues[parent];
+            const canvas = document.createElement("canvas");
+            canvas.width = width;
+            canvas.height = height;
+            parentEl.appendChild(canvas);
+            return getHandle(canvas);
+          },
+
+          dom_canvas_get_context: (canvas) => {
+            const canvasEl = jsValues[canvas];
+            const ctx = canvasEl.getContext("2d");
+            return getHandle(ctx);
+          },
+
+          dom_canvas_render: (canvas, ctx, pixelsPtr, width, height) => {
+            const ctxEl = jsValues[ctx];
+            // Wrap WASM memory directly without copying!
+            const array = new Uint8ClampedArray(wasmMemory.buffer, pixelsPtr, width * height * 4);
+            const imgData = new ImageData(array, width, height);
+            ctxEl.putImageData(imgData, 0, 0);
+          },
+
+          dom_start_animation_loop: (cbId) => {
+            const tick = () => {
+              wasmExports.zig_invoke_callback(cbId);
+              requestAnimationFrame(tick);
+            };
+            requestAnimationFrame(tick);
+          },
+
+          dom_ctx_begin_path: (ctx) => {
+            jsValues[ctx].beginPath();
+          },
+
+          dom_ctx_fill: (ctx) => {
+            jsValues[ctx].fill();
+          },
+
+          dom_ctx_arc: (ctx, x, y, radius, startAngle, endAngle, ccw) => {
+            jsValues[ctx].arc(x, y, radius, startAngle, endAngle, ccw === 1);
+          },
+
+          dom_ctx_fill_style: (ctx, ptr, len) => {
+            jsValues[ctx].fillStyle = readStr(wasmMemory, ptr, len);
+          },
+
           // --- Utilities ---
 
           dom_log: (ptr, len) => {

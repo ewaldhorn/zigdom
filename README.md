@@ -18,12 +18,14 @@ and zero hidden runtime overhead.
 
 ```
 src/
-  dom.zig      Core DOM library — 22 API functions
-  demo.zig     Demo application with embedded assets and event callbacks
+  dom.zig      Core DOM library — low-level JS DOM and Canvas 2D bindings
+  colour.zig   RGBA colour structures, grayscale conversions, and WASM PRNG
+  canvas.zig   In-memory pixel canvas, Bresenham lines, circles, and shapes
+  demo.zig     Blended demo (DOM controls + two real-time graphics canvases)
 docs/
   index.html   Page you open in the browser
   styles.css   Page styles 
-  zigdom.js    JS glue — handle table, string bridge, callback dispatch
+  zigdom.js    JS glue — handle table, string bridge, direct memory canvas rendering
   zigdom.wasm  Built binary (gitignored)
   bodystyle.css  Embedded by demo.zig at compile time
   dommie.txt     Embedded text displayed in the demo
@@ -140,7 +142,7 @@ symbols alive for the linker.
 
 ## API 
 
-| Concern | Functions |
+| Concern | Functions / Modules |
 |---|---|
 | Element creation | `createElement`, `createDiv`, `createParagraph(WithText)`, `createButton`, `createImg` |
 | Element access | `getElementById`, `getString`, `setValue`, `setFocus` |
@@ -149,3 +151,6 @@ symbols alive for the linker.
 | Visibility | `hide`, `show` |
 | Events | `addEventListener`, `addEventListenerById` |
 | Utilities | `log`, `showAlert` |
+| In-Memory Canvas (`canvas.zig`) | `Canvas.init`, `Canvas.clearScreen`, `Canvas.putPixel`, `Canvas.colourPutPixel`, `Canvas.getPixel`, `Canvas.line`, `Canvas.colourLine`, `Canvas.circle`, `Canvas.filledCircle`, `Canvas.borderCircle`, `Canvas.rectangle`, `Canvas.filledRectangle`, `Canvas.triangle`, `Canvas.render` |
+| Colour & Primitives (`colour.zig`) | `Colour` (RGBA, white, black, empty), `Colour.isEmpty`, `Colour.convertToGrayscale`, `NewRandomColour`, `Point` |
+| Direct 2D Context (`dom.zig`) | `Context2D.beginPath`, `Context2D.fill`, `Context2D.arc`, `Context2D.fillStyle` |

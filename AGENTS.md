@@ -39,14 +39,17 @@ This project uses Git. See .gitignore for excluded files.
 - **`src/dom.zig`**: The library itself. Implements elements creation, styling, and events.
 
 ### Key Modules
-- **`src/dom.zig`**: Low-level browser DOM bindings. Communicates with JavaScript via integer handles.
-- **`docs/zigdom.js`**: JS-side glue code implementing the handle table, string encoder/decoder, and callback table.
+- **`src/dom.zig`**: Low-level browser DOM and Context 2D bindings. Communicates with JavaScript via integer handles.
+- **`src/colour.zig`**: Color definitions, luminance-weighted grayscale conversions, and fast pseudorandom color generators.
+- **`src/canvas.zig`**: In-memory pixel canvas buffers and drawing primitives (lines, circles, boxes).
+- **`docs/zigdom.js`**: JS-side glue code implementing the handle table, string encoder/decoder, callback table, and direct-memory canvas rendering.
 - **`docs/index.html`**: Host page that fetches and instantiates the WASM binary.
 
 ### Data Flow
 - **Handles**: Rather than passing raw pointers to JS DOM elements (which is unsafe and complex in WASM), `dom.zig` uses a `u32` `Handle`. JS maintains an array of live DOM elements (`jsValues`) indexed by these handles.
 - **Strings**: Slices are passed to JS as a `(ptr, len)` pair. JS reads from WASM memory using `TextDecoder` and writes into WASM memory via `TextEncoder`.
-- **Event Listeners**: JS-registered event listeners call the exported `zig_invoke_callback(cb_id)` function, which dispatches events back to the registered handlers in Zig.
+- **Canvas Zero-Copy rendering**: Rather than copying bytes between environment targets, the Canvas passes the raw memory pointer (`pixels.ptr`) and dimensions to JavaScript. JavaScript creates a zero-copy `Uint8ClampedArray` view directly on top of WASM's linear memory buffer (`wasmMemory.buffer`) and displays it instantly via `putImageData`.
+- **Event Listeners**: JS-registered event listeners call the exported `zig_invoke_callback(cb_id)` function, which dispatches events back to the registered handlers in Zig. This is also used to drive real-time animation cycles using `requestAnimationFrame`.
 
 ## Cache Stability
 
