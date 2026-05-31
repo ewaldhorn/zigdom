@@ -2,6 +2,9 @@
 
 A [Zig](https://ziglang.org/) WASM DOM manipulation library.
 
+> [!IMPORTANT]
+> This library is fully compatible with and tested on **Zig 0.16.0**.
+
 This demonstrates Zig compiled to `wasm32-freestanding` targeting the browser,
 with a minimal JS glue layer.
 
@@ -27,6 +30,8 @@ docs/
 ```
 
 ## Build & Run
+
+Ensure you have **Zig 0.16.0** installed, then run:
 
 ```bash
 ./build.sh          # zig build-exe → docs/zigdom.wasm

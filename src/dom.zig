@@ -50,9 +50,12 @@ extern fn dom_alert(ptr: [*]const u8, len: usize) void;
 // JS references (document, body, head) from the browser.
 // ---------------------------------------------------------------------------
 pub fn init() void {
-    document = dom_get_global("document", 8);
-    body = dom_get_property(document, "body", 4);
-    head = dom_get_property(document, "head", 4);
+    const doc_name = "document";
+    const body_name = "body";
+    const head_name = "head";
+    document = dom_get_global(doc_name.ptr, doc_name.len);
+    body = dom_get_property(document, body_name.ptr, body_name.len);
+    head = dom_get_property(document, head_name.ptr, head_name.len);
 }
 
 // ---------------------------------------------------------------------------
@@ -80,14 +83,14 @@ pub fn createParagraphWithText(text: []const u8) Handle {
 
 pub fn createButton(text: []const u8) Handle {
     const b = createElement("button");
-    b.set("type", "button");
-    b.setInnerText(text);
+    set(b, "type", "button");
+    setInnerText(b, text);
     return b;
 }
 
 pub fn createImg(src: []const u8) Handle {
     const img = createElement("img");
-    img.set("src", src);
+    set(img, "src", src);
     return img;
 }
 
@@ -114,18 +117,8 @@ pub fn getElementById(id: []const u8) Handle {
 /// Wraps an existing element in a new div with the given classes.
 pub fn wrapElementWithNewDiv(element: Handle, classes: []const []const u8) Handle {
     const div = createDiv();
-    if (classes.len > 0) {
-        var buf: [256]u8 = undefined;
-        var i: usize = 0;
-        for (classes, 0..) |cls, idx| {
-            if (idx > 0) {
-                buf[i] = ' ';
-                i += 1;
-            }
-            @memcpy(buf[i..][0..cls.len], cls);
-            i += cls.len;
-        }
-        dom_set_class_name(div, buf[0..i].ptr, i);
+    for (classes) |cls| {
+        dom_class_list_add(div, cls.ptr, cls.len);
     }
     dom_append_child(div, element);
     return div;
@@ -138,14 +131,16 @@ pub fn wrapElementWithNewDiv(element: Handle, classes: []const []const u8) Handl
 pub fn hide(id: []const u8) void {
     const elem = dom_get_element_by_id(id.ptr, id.len);
     if (elem != INVALID) {
-        dom_set_display(elem, "none", 4);
+        const none_val = "none";
+        dom_set_display(elem, none_val.ptr, none_val.len);
     }
 }
 
 pub fn show(id: []const u8) void {
     const elem = dom_get_element_by_id(id.ptr, id.len);
     if (elem != INVALID) {
-        dom_set_display(elem, "block", 5);
+        const block_val = "block";
+        dom_set_display(elem, block_val.ptr, block_val.len);
     }
 }
 
@@ -160,6 +155,11 @@ pub fn setFocus(id: []const u8) void {
 // Property access (string-based)
 // ---------------------------------------------------------------------------
 
+/// Retrieves a string property from an element by its ID.
+/// 
+/// WARNING: The returned slice points directly to a shared global scratch buffer.
+/// If you need to retain the value across multiple calls to string-retrieval
+/// functions (e.g., `getString` or `Handle.get`), you MUST copy/clone the slice.
 pub fn getString(elem_id: []const u8, key: []const u8) []const u8 {
     const elem = dom_get_element_by_id(elem_id.ptr, elem_id.len);
     if (elem == INVALID) return "";
@@ -179,9 +179,14 @@ pub fn setValue(elem_id: []const u8, key: []const u8, value: []const u8) void {
 // ---------------------------------------------------------------------------
 
 pub fn Handle_set(self: Handle, comptime key: []const u8, value: []const u8) void {
-    dom_set_property_str(self, key, key.len, value.ptr, value.len);
+    dom_set_property_str(self, key.ptr, key.len, value.ptr, value.len);
 }
 
+/// Retrieves a string property from an element handle.
+/// 
+/// WARNING: The returned slice points directly to a shared global scratch buffer.
+/// If you need to retain the value across multiple calls to string-retrieval
+/// functions (e.g., `getString` or `Handle.get`), you MUST copy/clone the slice.
 pub fn Handle_get(self: Handle, key: []const u8) []const u8 {
     const actual_len = dom_get_property_str(self, key.ptr, key.len, &scratch, scratch.len);
     return scratch[0..@min(actual_len, scratch.len)];
@@ -204,21 +209,10 @@ pub fn Handle_removeClass(self: Handle, class: []const u8) void {
 }
 
 pub fn Handle_replaceClasses(self: Handle, classes: []const []const u8) void {
-    if (classes.len == 0) {
-        dom_set_class_name(self, "", 0);
-        return;
+    dom_set_class_name(self, "", 0);
+    for (classes) |cls| {
+        dom_class_list_add(self, cls.ptr, cls.len);
     }
-    var buf: [256]u8 = undefined;
-    var i: usize = 0;
-    for (classes, 0..) |cls, idx| {
-        if (idx > 0) {
-            buf[i] = ' ';
-            i += 1;
-        }
-        @memcpy(buf[i..][0..cls.len], cls);
-        i += cls.len;
-    }
-    dom_set_class_name(self, buf[0..i].ptr, i);
 }
 
 // ---------------------------------------------------------------------------
