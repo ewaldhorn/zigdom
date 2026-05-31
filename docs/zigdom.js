@@ -1,3 +1,4 @@
+// ------------------------------------------------------------------------------------------------
 // zigdom.js — JS glue for Zig WASM DOM manipulation
 // Replaces TinyGo's wasm_exec.js with a minimal bridge.
 // Provides imports for DOM operations and handles the callback table.
@@ -6,56 +7,71 @@
 // JS-side import functions read/write WASM memory via the exported buffer.
 // Use a mutable `wasmMemory` variable — set after instantiation, but
 // captured by closure in the import object defined before instantiation.
+// ------------------------------------------------------------------------------------------------
 
 (() => {
   "use strict";
 
+  // ----------------------------------------------------------------------------------------------
   const decoder = new TextDecoder("utf-8");
   const encoder = new TextEncoder("utf-8");
 
-  // ---------------------------------------------------------------
+  // ----------------------------------------------------------------------------------------------
   // JS Value Handle Table
   // Stores references to live JS objects (DOM elements, document, etc.)
   // indexed by integer handles passed to/from Zig.
   // Index 0 is always null / invalid.
-  // ---------------------------------------------------------------
+  // ----------------------------------------------------------------------------------------------
+
+  // ----------------------------------------------------------------------------------------------
   const jsValues = [null];
   let nextHandle = 1;
 
+  // ----------------------------------------------------------------------------------------------
   function getHandle(value) {
     const id = nextHandle++;
     jsValues[id] = value;
     return id;
   }
 
-  // ---------------------------------------------------------------
+  // ----------------------------------------------------------------------------------------------
   // String helpers
-  // ---------------------------------------------------------------
+  // ----------------------------------------------------------------------------------------------
+
+  // ----------------------------------------------------------------------------------------------
   function readStr(mem, ptr, len) {
     return decoder.decode(new Uint8Array(mem.buffer, ptr, len));
   }
 
+  // ----------------------------------------------------------------------------------------------
   function writeStr(mem, ptr, str) {
     const encoded = encoder.encode(str);
     new Uint8Array(mem.buffer, ptr, encoded.length).set(encoded);
     return encoded.length;
   }
 
-  // ---------------------------------------------------------------
+  // ----------------------------------------------------------------------------------------------
   // WASM Instantiation
-  // ---------------------------------------------------------------
+  // ----------------------------------------------------------------------------------------------
+
+  // ----------------------------------------------------------------------------------------------
   globalThis.ZigDom = {
     instantiate: async function (wasmUrl) {
+      // ------------------------------------------------------------------------------------------
       // The WASM module exports its own memory (Zig compiler sets the
       // initial page count based on data segments + stack). We do NOT
       // create a Memory here — instead we'll grab it from exports after
       // instantiation.
+      // ------------------------------------------------------------------------------------------
       let wasmMemory;
       let wasmExports;
 
+      // ------------------------------------------------------------------------------------------
       const importObject = {
         env: {
-          // --- Generic JS value access ---
+          // --------------------------------------------------------------------------------------
+          // Generic JS value access
+          // --------------------------------------------------------------------------------------
 
           dom_get_global: (ptr, len) => {
             return getHandle(globalThis[readStr(wasmMemory, ptr, len)]);
@@ -67,7 +83,9 @@
             );
           },
 
-          // --- Element creation ---
+          // --------------------------------------------------------------------------------------
+          // Element creation
+          // --------------------------------------------------------------------------------------
 
           dom_create_element: (tagPtr, tagLen) => {
             return getHandle(
@@ -75,7 +93,9 @@
             );
           },
 
-          // --- Element manipulation ---
+          // --------------------------------------------------------------------------------------
+          // Element manipulation
+          // --------------------------------------------------------------------------------------
 
           dom_append_child: (parent, child) => {
             jsValues[parent].appendChild(jsValues[child]);
@@ -148,7 +168,9 @@
             return el ? getHandle(el) : 0;
           },
 
-          // --- Style injection ---
+          // --------------------------------------------------------------------------------------
+          // Style injection
+          // --------------------------------------------------------------------------------------
 
           dom_add_style_element: (ptr, len) => {
             const style = document.createElement("style");
@@ -157,7 +179,9 @@
             document.head.appendChild(style);
           },
 
-          // --- Events ---
+          // --------------------------------------------------------------------------------------
+          // Events
+          // --------------------------------------------------------------------------------------
 
           dom_add_event_listener: (elem, eventPtr, eventLen, cbId) => {
             const event = readStr(wasmMemory, eventPtr, eventLen);
@@ -166,7 +190,9 @@
             });
           },
 
-          // --- Canvas & Context 2D ---
+          // --------------------------------------------------------------------------------------
+          // Canvas & Context 2D
+          // --------------------------------------------------------------------------------------
 
           dom_canvas_create: (parent, width, height) => {
             const parentEl = jsValues[parent];
@@ -215,7 +241,9 @@
             jsValues[ctx].fillStyle = readStr(wasmMemory, ptr, len);
           },
 
-          // --- Utilities ---
+          // --------------------------------------------------------------------------------------
+          // Utilities
+          // --------------------------------------------------------------------------------------
 
           dom_log: (ptr, len) => {
             console.log(readStr(wasmMemory, ptr, len));
@@ -227,7 +255,9 @@
         },
       };
 
+      // ------------------------------------------------------------------------------------------
       // Fetch and instantiate the WASM module using streaming compilation if available
+      // ------------------------------------------------------------------------------------------
       let wasm;
       if (typeof WebAssembly.instantiateStreaming === "function") {
         wasm = await WebAssembly.instantiateStreaming(
@@ -242,35 +272,41 @@
 
       wasmExports = wasm.instance.exports;
 
+      // ------------------------------------------------------------------------------------------
       // Grab the WASM-exported memory — all import functions reference
       // the `wasmMemory` variable by closure, so they'll now use the
       // correct buffer.
+      // ------------------------------------------------------------------------------------------
       wasmMemory = wasmExports.memory;
 
+      // ------------------------------------------------------------------------------------------
       // Initialize: runs the demo
+      // ------------------------------------------------------------------------------------------
       wasmExports.zig_init();
 
-      // ---------------------------------------------------------------
+      // ------------------------------------------------------------------------------------------
       // Touch / Click interaction for the physics canvas (canvas two).
       // After zig_init, Zig has created the canvas elements.
       // The physics canvas is the sole child of #canvasTwoDiv.
-      // ---------------------------------------------------------------
+      // ------------------------------------------------------------------------------------------
       const canvasTwoDiv = document.getElementById("canvasTwoDiv");
       if (canvasTwoDiv) {
         const physicsCanvas = canvasTwoDiv.querySelector("canvas");
         if (physicsCanvas) {
+          // --------------------------------------------------------------------------------------
           // Show controls as flex (CSS sets display:none by default, Zig calls show() which sets block)
           // Override to flex so the buttons wrap nicely.
+          // --------------------------------------------------------------------------------------
           const controls = document.getElementById("controls");
           if (controls) controls.style.display = "flex";
 
           function handleInteraction(clientX, clientY) {
             const rect = physicsCanvas.getBoundingClientRect();
             // Map from CSS pixels to canvas pixel space
-            const scaleX = physicsCanvas.width  / rect.width;
+            const scaleX = physicsCanvas.width / rect.width;
             const scaleY = physicsCanvas.height / rect.height;
             const x = Math.round((clientX - rect.left) * scaleX);
-            const y = Math.round((clientY - rect.top)  * scaleY);
+            const y = Math.round((clientY - rect.top) * scaleY);
             wasmExports.zig_set_interaction(x, y);
             wasmExports.zig_invoke_callback(4);
           }
