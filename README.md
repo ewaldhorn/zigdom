@@ -48,6 +48,87 @@ Zigdom uses a lightweight JS bridge:
 - **No GC** — No hidden allocations, no finalizers. What Zig allocates,
   Zig frees (or the page unloads).
 
+## Using in Your Project
+
+Zigdom is designed to be vendored — copy `src/dom.zig` into your project
+and point your WASM build at it. No package manager step needed.
+
+### 1. Add the library
+
+Copy `dom.zig` into your project:
+
+```bash
+curl -O https://raw.githubusercontent.com/ewaldhorn/zigdom/main/src/dom.zig
+```
+
+Or as a git submodule:
+
+```bash
+git submodule add https://github.com/ewaldhorn/zigdom lib/zigdom
+```
+
+### 2. Zig code
+
+Import `dom.zig`, call `init()`, then use the API:
+
+```zig
+const dom = @import("dom.zig");
+
+export fn zig_init() void {
+    dom.init();
+
+    const h1 = dom.createElement("h1");
+    h1.setInnerText("Hello from Zig!");
+    dom.addToBody(h1);
+}
+```
+
+If your app uses DOM event callbacks, also export `zig_invoke_callback`:
+
+```zig
+export fn zig_invoke_callback(id: u32) void {
+    switch (id) {
+        0 => myClickHandler(),
+        else => {},
+    }
+}
+```
+
+### 3. JS glue
+
+`dom.zig` depends on `zigdom.js` at runtime — it provides the handle table,
+string bridge, and callback dispatch. Include it in your HTML before your
+WASM load code:
+
+```html
+<script src="zigdom.js"></script>
+```
+
+Copy it from this repo:
+
+```bash
+curl -O https://raw.githubusercontent.com/ewaldhorn/zigdom/main/docs/zigdom.js
+```
+
+### 4. Build
+
+Compile to WASM with the required flags:
+
+```bash
+zig build-exe src/main.zig \
+    -target wasm32-freestanding \
+    -fno-entry \
+    -rdynamic \
+    -O ReleaseSmall \
+    --export=zig_init \
+    --export=zig_invoke_callback \
+    -femit-bin=docs/app.wasm
+```
+
+`-fno-entry` skips the C runtime, `-rdynamic` exports all symbols so JS can
+call `zig_init`, and `--export` keeps the entry-point and callback-dispatch
+symbols alive for the linker.
+
 ## API 
 
 | Concern | Functions |
