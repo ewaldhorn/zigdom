@@ -83,7 +83,7 @@ export fn zig_init() void {
     dom.init();
 
     const h1 = dom.createElement("h1");
-    h1.setInnerText("Hello from Zig!");
+    dom.setInnerText(h1, "Hello from Zig!");
     dom.addToBody(h1);
 }
 ```
@@ -102,14 +102,18 @@ export fn zig_invoke_callback(id: u32) void {
 ### 3. JS glue
 
 `dom.zig` depends on `zigdom.js` at runtime — it provides the handle table,
-string bridge, and callback dispatch. Include it in your HTML before your
-WASM load code:
+string bridge, and callback dispatch. Include it in your HTML and load the WASM binary using the `ZigDom.instantiate` helper:
 
 ```html
 <script src="zigdom.js"></script>
+<script type="module">
+  ZigDom.instantiate("app.wasm").catch(err => {
+    console.error("Zigdom failed to load:", err);
+  });
+</script>
 ```
 
-Copy it from this repo:
+Copy `zigdom.js` from this repo:
 
 ```bash
 curl -O https://raw.githubusercontent.com/ewaldhorn/zigdom/main/docs/zigdom.js
