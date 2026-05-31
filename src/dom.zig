@@ -45,6 +45,15 @@ extern fn dom_add_event_listener(elem: Handle, event_ptr: [*]const u8, event_len
 extern fn dom_log(ptr: [*]const u8, len: usize) void;
 extern fn dom_alert(ptr: [*]const u8, len: usize) void;
 
+extern fn dom_canvas_create(parent: Handle, width: u32, height: u32) Handle;
+extern fn dom_canvas_get_context(canvas: Handle) Handle;
+extern fn dom_canvas_render(canvas: Handle, ctx: Handle, pixels_ptr: [*]const u8, width: u32, height: u32) void;
+extern fn dom_start_animation_loop(cb_id: u32) void;
+extern fn dom_ctx_begin_path(ctx: Handle) void;
+extern fn dom_ctx_fill(ctx: Handle) void;
+extern fn dom_ctx_arc(ctx: Handle, x: f64, y: f64, radius: f64, start: f64, end: f64, ccw: u32) void;
+extern fn dom_ctx_fill_style(ctx: Handle, ptr: [*]const u8, len: usize) void;
+
 // ---------------------------------------------------------------------------
 // init — must be called once before any other dom function. Captures global
 // JS references (document, body, head) from the browser.
@@ -323,3 +332,43 @@ pub fn removeClass2(self: Handle, class: []const u8) void {
 pub fn replaceClasses(self: Handle, classes: []const []const u8) void {
     Handle_replaceClasses(self, classes);
 }
+
+// ===========================================================================
+// Canvas & Context 2D Utilities
+// ===========================================================================
+
+pub fn canvasCreate(parent: Handle, width: u32, height: u32) Handle {
+    return dom_canvas_create(parent, width, height);
+}
+
+pub fn canvasGetContext(canvas: Handle) Handle {
+    return dom_canvas_get_context(canvas);
+}
+
+pub fn canvasRender(canvas: Handle, ctx: Handle, pixels_ptr: [*]const u8, width: u32, height: u32) void {
+    dom_canvas_render(canvas, ctx, pixels_ptr, width, height);
+}
+
+pub fn startAnimationLoop(cb_id: u32) void {
+    dom_start_animation_loop(cb_id);
+}
+
+pub const Context2D = struct {
+    ctx: Handle,
+
+    pub fn beginPath(self: Context2D) void {
+        dom_ctx_begin_path(self.ctx);
+    }
+
+    pub fn fill(self: Context2D) void {
+        dom_ctx_fill(self.ctx);
+    }
+
+    pub fn arc(self: Context2D, x: f64, y: f64, radius: f64, startAngle: f64, endAngle: f64, ccw: bool) void {
+        dom_ctx_arc(self.ctx, x, y, radius, startAngle, endAngle, if (ccw) 1 else 0);
+    }
+
+    pub fn fillStyle(self: Context2D, style: []const u8) void {
+        dom_ctx_fill_style(self.ctx, style.ptr, style.len);
+    }
+};
