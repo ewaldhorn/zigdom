@@ -184,64 +184,67 @@ pub fn setValue(elem_id: []const u8, key: []const u8, value: []const u8) void {
 }
 
 // ---------------------------------------------------------------------------
-// Handle-based property access (more efficient)
+// Handle-based property access
 // ---------------------------------------------------------------------------
 
-pub fn Handle_set(self: Handle, comptime key: []const u8, value: []const u8) void {
+/// Sets a string property on an element by handle.
+pub fn set(self: Handle, comptime key: []const u8, value: []const u8) void {
     dom_set_property_str(self, key.ptr, key.len, value.ptr, value.len);
 }
 
 /// Retrieves a string property from an element handle.
-/// 
-/// WARNING: The returned slice points directly to a shared global scratch buffer.
-/// If you need to retain the value across multiple calls to string-retrieval
-/// functions (e.g., `getString` or `Handle.get`), you MUST copy/clone the slice.
-pub fn Handle_get(self: Handle, key: []const u8) []const u8 {
+///
+/// WARNING: The returned slice points to a shared global scratch buffer.
+/// If you need to retain the value across multiple string-retrieval calls
+/// you MUST copy/clone it first.
+pub fn get(self: Handle, key: []const u8) []const u8 {
     const actual_len = dom_get_property_str(self, key.ptr, key.len, &scratch, scratch.len);
     return scratch[0..@min(actual_len, scratch.len)];
 }
 
-pub fn Handle_setInnerText(self: Handle, text: []const u8) void {
+/// Sets the inner text of an element.
+pub fn setInnerText(self: Handle, text: []const u8) void {
     dom_set_inner_text(self, text.ptr, text.len);
 }
 
-pub fn Handle_setInnerHTML(self: Handle, html: []const u8) void {
+/// Sets the inner HTML of an element.
+pub fn setInnerHTML(self: Handle, html: []const u8) void {
     dom_set_inner_html(self, html.ptr, html.len);
 }
 
-pub fn Handle_addClass(self: Handle, class: []const u8) void {
+/// Adds a CSS class to an element by handle.
+pub fn addClassTo(self: Handle, class: []const u8) void {
     dom_class_list_add(self, class.ptr, class.len);
 }
 
-pub fn Handle_removeClass(self: Handle, class: []const u8) void {
+/// Removes a CSS class from an element by handle.
+pub fn removeClassFrom(self: Handle, class: []const u8) void {
     dom_class_list_remove(self, class.ptr, class.len);
 }
 
-pub fn Handle_replaceClasses(self: Handle, classes: []const []const u8) void {
+/// Replaces all CSS classes on an element with the given list.
+pub fn replaceClasses(self: Handle, classes: []const []const u8) void {
     dom_set_class_name(self, "", 0);
-    for (classes) |cls| {
-        dom_class_list_add(self, cls.ptr, cls.len);
-    }
+    for (classes) |cls| dom_class_list_add(self, cls.ptr, cls.len);
 }
 
 // ---------------------------------------------------------------------------
-// Style
+// Style (by element ID)
 // ---------------------------------------------------------------------------
 
+/// Adds a CSS class to an element looked up by its DOM id attribute.
 pub fn addClass(elem_id: []const u8, class: []const u8) void {
     const elem = dom_get_element_by_id(elem_id.ptr, elem_id.len);
-    if (elem != INVALID) {
-        dom_class_list_add(elem, class.ptr, class.len);
-    }
+    if (elem != INVALID) dom_class_list_add(elem, class.ptr, class.len);
 }
 
+/// Removes a CSS class from an element looked up by its DOM id attribute.
 pub fn removeClass(elem_id: []const u8, class: []const u8) void {
     const elem = dom_get_element_by_id(elem_id.ptr, elem_id.len);
-    if (elem != INVALID) {
-        dom_class_list_remove(elem, class.ptr, class.len);
-    }
+    if (elem != INVALID) dom_class_list_remove(elem, class.ptr, class.len);
 }
 
+/// Injects a `<style>` element containing `css` into `document.head`.
 pub fn addNewStyleElement(css: []const u8) void {
     dom_add_style_element(css.ptr, css.len);
 }
@@ -266,30 +269,27 @@ pub fn addEventListenerById(id: []const u8, event: []const u8, cb_id: u32) void 
 // Logging
 // ---------------------------------------------------------------------------
 
+/// Logs one or more messages to the browser console, joined with spaces.
+/// If the total joined length fits in the shared scratch buffer, all messages
+/// are written as a single `console.log` call. Otherwise each message is
+/// logged individually — note that this fallback omits the spaces between them.
 pub fn log(messages: []const []const u8) void {
-    // Join messages with space (like the original)
     var total: usize = 0;
     for (messages, 0..) |msg, i| {
         if (i > 0) total += 1;
         total += msg.len;
     }
-
-    // If total fits in scratch, join there; otherwise call per-message
     if (total < scratch.len) {
         var pos: usize = 0;
         for (messages, 0..) |msg, i| {
-            if (i > 0) {
-                scratch[pos] = ' ';
-                pos += 1;
-            }
+            if (i > 0) { scratch[pos] = ' '; pos += 1; }
             @memcpy(scratch[pos..][0..msg.len], msg);
             pos += msg.len;
         }
         dom_log(scratch[0..pos].ptr, pos);
     } else {
-        for (messages) |msg| {
-            dom_log(msg.ptr, msg.len);
-        }
+        // Fallback: individual calls without spaces (total exceeds scratch buffer).
+        for (messages) |msg| dom_log(msg.ptr, msg.len);
     }
 }
 
@@ -301,37 +301,6 @@ pub fn showAlert(msg: []const u8) void {
     dom_alert(msg.ptr, msg.len);
 }
 
-// ===========================================================================
-// Extension methods for Handle
-// ===========================================================================
-
-pub fn set(self: Handle, comptime key: []const u8, value: []const u8) void {
-    Handle_set(self, key, value);
-}
-
-pub fn get(self: Handle, key: []const u8) []const u8 {
-    return Handle_get(self, key);
-}
-
-pub fn setInnerText(self: Handle, text: []const u8) void {
-    Handle_setInnerText(self, text);
-}
-
-pub fn setInnerHTML(self: Handle, html: []const u8) void {
-    Handle_setInnerHTML(self, html);
-}
-
-pub fn addClass2(self: Handle, class: []const u8) void {
-    Handle_addClass(self, class);
-}
-
-pub fn removeClass2(self: Handle, class: []const u8) void {
-    Handle_removeClass(self, class);
-}
-
-pub fn replaceClasses(self: Handle, classes: []const []const u8) void {
-    Handle_replaceClasses(self, classes);
-}
 
 // ===========================================================================
 // Canvas & Context 2D Utilities
