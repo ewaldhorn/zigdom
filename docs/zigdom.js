@@ -44,10 +44,11 @@
   }
 
   // ----------------------------------------------------------------------------------------------
-  function writeStr(mem, ptr, str) {
+  function writeStr(mem, ptr, str, maxLen) {
     const encoded = encoder.encode(str);
-    new Uint8Array(mem.buffer, ptr, encoded.length).set(encoded);
-    return encoded.length;
+    const len = maxLen !== undefined ? Math.min(encoded.length, maxLen) : encoded.length;
+    new Uint8Array(mem.buffer, ptr, len).set(encoded.subarray(0, len));
+    return len;
   }
 
   // ----------------------------------------------------------------------------------------------
@@ -74,7 +75,8 @@
           // --------------------------------------------------------------------------------------
 
           dom_get_global: (ptr, len) => {
-            return getHandle(globalThis[readStr(wasmMemory, ptr, len)]);
+            const val = globalThis[readStr(wasmMemory, ptr, len)];
+            return (val !== undefined && val !== null) ? getHandle(val) : 0;
           },
 
           dom_get_property: (handle, keyPtr, keyLen) => {
@@ -130,7 +132,7 @@
           dom_get_property_str: (elem, keyPtr, keyLen, outPtr, outLen) => {
             const key = readStr(wasmMemory, keyPtr, keyLen);
             const val = String(jsValues[elem][key]);
-            return writeStr(wasmMemory, outPtr, val);
+            return writeStr(wasmMemory, outPtr, val, outLen);
           },
 
           dom_set_class_name: (elem, ptr, len) => {
@@ -377,6 +379,7 @@
 
           function handleInteraction(clientX, clientY) {
             const rect = physicsCanvas.getBoundingClientRect();
+            if (rect.width === 0 || rect.height === 0) return;
             // Map from CSS pixels to canvas pixel space
             const scaleX = physicsCanvas.width / rect.width;
             const scaleY = physicsCanvas.height / rect.height;

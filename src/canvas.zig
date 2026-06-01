@@ -242,7 +242,12 @@ pub const Canvas = struct {
     /// Draws a ring (annulus) — the area between `radius` and `radius - borderWidth`.
     pub fn borderCircle(self: *Canvas, midX: i32, midY: i32, radius: i32, borderWidth: i32) void {
         if (radius <= 0) return;
+        if (borderWidth <= 0) return;
         const innerRadius = radius - borderWidth;
+        if (innerRadius <= 0) {
+            self.filledCircle(midX, midY, radius);
+            return;
+        }
         const outerR2 = radius * radius;
         const innerR2 = innerRadius * innerRadius;
         var dy = -radius;
@@ -301,6 +306,7 @@ pub const Canvas = struct {
     pub fn rectangle(self: *Canvas, xStart: i32, yStart: i32, width: i32, height: i32, thickness: i32) void {
         var t: i32 = 0;
         while (t < thickness) : (t += 1) {
+            if (width - t * 2 < 0 or height - t * 2 < 0) break;
             self.rectangleOutline(xStart + t, yStart + t, width - t * 2, height - t * 2);
         }
     }
