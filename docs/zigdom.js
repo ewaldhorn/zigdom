@@ -282,59 +282,44 @@
       wasmMemory = wasmExports.memory;
 
       // ------------------------------------------------------------------------------------------
-      // Web Audio API Synth Bridge
+      // Web Audio API Synth Bridge (AudioWorkletNode — runs on dedicated audio thread)
       // ------------------------------------------------------------------------------------------
       let audioCtx = null;
-      let scriptNode = null;
+      let synthNode = null;
       let gainNode = null;
       let audioPlaying = false;
       let globalVolume = 0.2;
 
-      globalThis.toggleAudio = function () {
+      globalThis.toggleAudio = async function () {
         if (!audioCtx) {
           // Initialize AudioContext on user gesture
-          audioCtx = new (window.AudioContext || window.webkitAudioContext)({
-            sampleRate: 44100
-          });
+          audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        }
 
-          // Create a mono ScriptProcessorNode with 1024 sample block size
-          scriptNode = audioCtx.createScriptProcessor(1024, 0, 1);
+        if (!synthNode) {
+          // Load the AudioWorkletProcessor module (dedicated audio thread)
+          await audioCtx.audioWorklet.addModule('synth-worklet.js');
 
-          scriptNode.onaudioprocess = (e) => {
-            const outputBuffer = e.outputBuffer;
-            const channelData = outputBuffer.getChannelData(0);
-
-            if (!audioPlaying) {
-              channelData.fill(0);
-              return;
-            }
-
-            const numSamples = channelData.length;
-
-            // Render next block of samples in WASM
-            const ptr = wasmExports.zig_fill_audio_buffer(numSamples);
-
-            // Zero-copy: wrap WASM linear memory directly
-            const wasmSamples = new Float32Array(wasmMemory.buffer, ptr, numSamples);
-
-            // Copy samples directly into Web Audio output buffer (highly optimized browser internal copy)
-            channelData.set(wasmSamples);
-          };
+          // Create the synth AudioWorkletNode
+          synthNode = new AudioWorkletNode(audioCtx, 'synth-worklet');
 
           // Create standard GainNode for hardware-accelerated volume control
           gainNode = audioCtx.createGain();
           gainNode.gain.setValueAtTime(globalVolume, audioCtx.currentTime);
 
-          // Connect ScriptProcessor -> GainNode -> Destination
-          scriptNode.connect(gainNode);
+          // Connect AudioWorkletNode -> GainNode -> Destination
+          synthNode.connect(gainNode);
           gainNode.connect(audioCtx.destination);
         }
 
         if (audioCtx.state === "suspended") {
-          audioCtx.resume();
+          await audioCtx.resume();
         }
 
         audioPlaying = !audioPlaying;
+
+        // Send play state to the worklet's dedicated audio thread
+        synthNode.port.postMessage({ type: 'play', value: audioPlaying });
 
         const btn = document.getElementById("audioToggleButton");
         if (btn) {
@@ -357,9 +342,46 @@
       };
 
       // ------------------------------------------------------------------------------------------
+      // Click sound — pre-rendered 50ms UI click from Zig WASM
+      // ------------------------------------------------------------------------------------------
+      let clickAudioBuffer = null; // AudioBuffer, created lazily on first click
+
+      globalThis.playClickSound = function () {
+        // Lazy AudioContext (always called from user gesture, so autoplay policy OK)
+        if (!audioCtx) {
+          audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        }
+        if (audioCtx.state === "suspended") {
+          audioCtx.resume();
+        }
+
+        // Lazy AudioBuffer creation from pre-rendered WASM samples
+        if (!clickAudioBuffer) {
+          const ptr = wasmExports.zig_get_click_buffer();
+          const len = wasmExports.zig_get_click_buffer_len();
+          const samples = new Float32Array(wasmMemory.buffer, ptr, len);
+          clickAudioBuffer = audioCtx.createBuffer(1, len, 44100);
+          clickAudioBuffer.copyToChannel(samples, 0);
+        }
+
+        const source = audioCtx.createBufferSource();
+        source.buffer = clickAudioBuffer;
+        source.connect(audioCtx.destination);
+        source.start();
+      };
+
+      // ------------------------------------------------------------------------------------------
       // Initialize: runs the demo
       // ------------------------------------------------------------------------------------------
       wasmExports.zig_init();
+
+      // ------------------------------------------------------------------------------------------
+      // Wire click sound to action buttons (skip audioToggleButton — that's the synth)
+      // ------------------------------------------------------------------------------------------
+      ['addSomethingButton', 'clearAsideButton', 'refreshButton'].forEach(function (id) {
+        const btn = document.getElementById(id);
+        if (btn) btn.addEventListener('click', playClickSound);
+      });
 
       // ------------------------------------------------------------------------------------------
       // Touch / Click interaction for the physics canvas (canvas two).

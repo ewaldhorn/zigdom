@@ -29,6 +29,7 @@ This project uses Git. See .gitignore for excluded files.
 1. **Unreferenced Functions**: Zig compiles lazily. Unused library functions are not analyzed by the compiler during standard builds. Always create or run test files referencing modified functions to guarantee no compiler errors exist!
 2. **String Aliasing**: `getString` and `Handle_get` return slices pointing to a shared static global `scratch` buffer. If developers need to persist retrieved string values across multiple library calls, they must explicitly copy/clone them.
 3. **No Dynamic Allocations**: The DOM library uses zero heap allocations/GC. Ensure any new element or class manipulation uses stack allocation, loops, or direct JS handle manipulation rather than static/fixed-size buffers that can overflow.
+4. **Decoupled AudioContext Setup**: Since `audioCtx` is shared between one-shot UI clicks and the retro soundtrack synthesizer, their setups must remain decoupled. Initializing the audio context for click sounds must not skip or block the eventual initialization of the soundtrack's `synthNode` (AudioWorkletNode) on subsequent activations.
 
 ## Architecture
 
@@ -42,15 +43,16 @@ This project uses Git. See .gitignore for excluded files.
 - **`src/dom.zig`**: Low-level browser DOM and Context 2D bindings. Communicates with JavaScript via integer handles.
 - **`src/colour.zig`**: Color definitions, luminance-weighted grayscale conversions, and fast pseudorandom color generators.
 - **`src/canvas.zig`**: In-memory pixel canvas buffers and drawing primitives (lines, circles, boxes).
-- **`src/sound.zig`**: Zero-heap virtual analog synthesizer, step sequencer, and echo delay lines.
-- **`docs/zigdom.js`**: JS-side glue code implementing the handle table, string encoder/decoder, callback table, direct-memory canvas, and Web Audio.
+- **`src/sound.zig`**: Zero-heap sound effects generator. Pre-renders the UI click sound buffer for low-latency, hardware-accelerated playback.
+- **`docs/zigdom.js`**: JS-side glue code implementing the handle table, string encoder/decoder, callback table, and decoupled Web Audio control.
+- **`docs/synth-worklet.js`**: Dedicated AudioWorkletProcessor containing the 1980s retro synth engine, sequencer, and circular delay lines, running on a dedicated audio thread.
 - **`docs/index.html`**: Host page that fetches and instantiates the WASM binary.
 
 ### Data Flow
 - **Handles**: Rather than passing raw pointers to JS DOM elements (which is unsafe and complex in WASM), `dom.zig` uses a `u32` `Handle`. JS maintains an array of live DOM elements (`jsValues`) indexed by these handles.
 - **Strings**: Slices are passed to JS as a `(ptr, len)` pair. JS reads from WASM memory using `TextDecoder` and writes into WASM memory via `TextEncoder`.
 - **Canvas Zero-Copy rendering**: Rather than copying bytes between environment targets, the Canvas passes the raw memory pointer (`pixels.ptr`) and dimensions to JavaScript. JavaScript creates a zero-copy `Uint8ClampedArray` view directly on top of WASM's linear memory buffer (`wasmMemory.buffer`) and displays it instantly via `putImageData`.
-- **Audio Zero-Copy streaming**: Synthesized audio samples reside in a static WASM buffer. JS creates a zero-copy `Float32Array` view directly on top of WASM's linear memory buffer (`wasmMemory.buffer`) and pipes it through a native browser `GainNode` for hardware-accelerated, pop-free volume scaling.
+- **Audio Architecture & Zero-Copy streaming**: The retro synth soundtrack has been migrated to a dedicated browser `AudioWorklet` thread (`docs/synth-worklet.js`) to guarantee stutter-free performance independent of main-thread layout or drawing. Short UI sound effects (like the 50ms button click) are pre-rendered into static buffers in WASM (`src/sound.zig`). On the first user interaction, JS creates a zero-copy `Float32Array` view on top of WASM's memory buffer (`wasmMemory.buffer`), copies it directly into a native Web Audio buffer, and triggers it with sub-millisecond, hardware-accelerated latency.
 - **Event Listeners**: JS-registered event listeners call the exported `zig_invoke_callback(cb_id)` function, which dispatches events back to the registered handlers in Zig. This is also used to drive real-time animation cycles using `requestAnimationFrame`.
 
 ## Cache Stability

@@ -11,7 +11,7 @@ const sound = @import("sound.zig");
 // ------------------------------------------------------------------------------------------------
 const body_style = @embedFile("bodystyle.css");
 const dommie_text = @embedFile("zigdom.txt");
-const VERSION = "0.0.1b";
+const VERSION = "0.0.1c";
 const NAME = "Zigdom Demo";
 
 // ------------------------------------------------------------------------------------------------
@@ -27,9 +27,8 @@ var aside_element: dom.Handle = dom.INVALID;
 var canvas_one_time: u32 = 0;
 var grid_offset: f64 = 0.0;
 
-// Synthesizer State & Static Audio Buffer
-var global_synth: sound.Synth = .{};
-var audio_buffer: [4096]f32 = undefined;
+// Click sound buffer — pre-rendered 50ms UI click (2205 samples at 44.1kHz)
+var click_buffer: [2205]f32 = undefined;
 
 // ------------------------------------------------------------------------------------------------
 // CSS class / size options for addRandomParagraph
@@ -675,19 +674,19 @@ export fn zig_init() void {
     is_ready = true;
 
     // Start the rAF loop — callback 3 fires once per browser frame.
+    // Pre-render UI click sound into static buffer for button feedback
+    sound.fillClick(&click_buffer);
+
     dom.startAnimationLoop(3);
 }
 
 // ------------------------------------------------------------------------------------------------
-// Audio Stream Export
+// Sound effect exports — JS retrieves pre-rendered click buffer for UI button feedback
 // ------------------------------------------------------------------------------------------------
-/// Exported audio generation hook. JS Web Audio ScriptProcessorNode invokes this
-/// to dynamically render the next block of 1980s synth soundtrack samples.
-export fn zig_fill_audio_buffer(len: usize) [*]const f32 {
-    const clamp_len = @min(len, audio_buffer.len);
-    var i: usize = 0;
-    while (i < clamp_len) : (i += 1) {
-        audio_buffer[i] = global_synth.nextSample();
-    }
-    return &audio_buffer;
+export fn zig_get_click_buffer() [*]const f32 {
+    return &click_buffer;
+}
+
+export fn zig_get_click_buffer_len() usize {
+    return click_buffer.len;
 }

@@ -21,15 +21,16 @@ src/
   dom.zig        Core DOM library — low-level JS DOM and Canvas 2D bindings
   canvas.zig     In-memory pixel canvas, Bresenham lines, circles, and shapes
   colour.zig     RGBA colour structures, grayscale conversions, and PRNG
-  sound.zig      Zero-heap 1980s retro synth engine, sequencer, and circular delay
-  demo.zig       Demo entry point (DOM controls, graphics canvases + synth audio export)
+  sound.zig      Zero-heap UI sound effects generator (pre-rendered button click blip)
+  demo.zig       Demo entry point (DOM controls, graphics canvases + sound effect export)
   bodystyle.css  CSS embedded into the WASM binary at compile time (@embedFile)
   zigdom.txt     Text embedded into the WASM binary at compile time (@embedFile)
 docs/
-  index.html   Page you open in the browser
-  styles.css   Page styles
-  zigdom.js    JS glue — handle table, string bridge, direct-memory canvas, and Web Audio
-  zigdom.wasm  Built binary (see .gitignore)
+  index.html       Page you open in the browser
+  styles.css       Page styles
+  zigdom.js        JS glue — handle table, string bridge, direct-memory canvas, and audio control
+  synth-worklet.js Dedicated AudioWorklet processor for the retro soundtrack synth
+  zigdom.wasm      Built binary (see .gitignore)
 ```
 
 ## Build & Run
@@ -56,10 +57,15 @@ Zigdom uses a lightweight JS bridge:
 - **Zero-copy canvas** — The pixel buffer lives inside WASM memory. JS
   creates a `Uint8ClampedArray` view directly on it and calls `putImageData`
   — no copy between Zig and the browser canvas.
-- **Zero-copy audio** — Audio samples are synthesized inside WASM memory. JS
-  creates a `Float32Array` view directly on top of WASM's linear memory buffer,
-  streaming the procedural 1980s synth waves straight to a native, hardware-accelerated
-  Web Audio `GainNode` with zero copying.
+- **Low-latency UI audio & dedicated synth thread** — The 1980s retro
+  soundtrack synthesizer runs inside a dedicated browser `AudioWorklet` thread
+  (`docs/synth-worklet.js`) to guarantee pop-free, stutter-free playback under heavy
+  DOM and Canvas rendering. Meanwhile, short UI sound effects (like the 50ms button
+  click) are pre-rendered directly into a static WASM buffer inside `src/sound.zig`.
+  On first play, JavaScript wraps the WASM memory buffer in a zero-copy `Float32Array`
+  view, copies it to a native AudioBuffer, and triggers it with sub-millisecond,
+  hardware-accelerated latency. Both share a lazily-initialized browser `AudioContext`
+  with decoupled node setup.
 - **No GC** — No hidden allocations, no finalizers. All data lives in
   fixed-size global arrays in the WASM data segment.
 
@@ -148,10 +154,11 @@ the WASM binary using the `ZigDom.instantiate` helper:
 </script>
 ```
 
-Copy `zigdom.js` from this repo:
+Copy `zigdom.js` and `synth-worklet.js` from this repo:
 
 ```bash
 curl -O https://raw.githubusercontent.com/ewaldhorn/zigdom/main/docs/zigdom.js
+curl -O https://raw.githubusercontent.com/ewaldhorn/zigdom/main/docs/synth-worklet.js
 ```
 
 ### 4. Build
@@ -167,7 +174,8 @@ zig build-exe src/main.zig \
     -O ReleaseSmall \
     --export=zig_init \
     --export=zig_invoke_callback \
-    --export=zig_fill_audio_buffer \
+    --export=zig_get_click_buffer \
+    --export=zig_get_click_buffer_len \
     -femit-bin=docs/app.wasm
 ```
 
@@ -237,14 +245,12 @@ it to the browser canvas in one zero-copy operation.
 xorshift64 PRNG seeded at 1337. Call `colour.seed(n)` with a non-zero
 value to get a different random sequence.
 
-### `sound.zig` — Procedural Audio Synth
+### `sound.zig` — Zero-Heap Sound Effects
 
 | Concern | Functions / Types |
 |---|---|
-| Type | `Synth` — `{ current_sample, current_step, ... }` |
-| Triggers | `Synth.triggerBass(midi_note)`, `Synth.triggerArp(midi_note)` |
-| Sample Generation | `Synth.nextSample() f32` |
-| Configuration | `SAMPLE_RATE` (44.1kHz), `BPM` (125.0) |
+| Sound Effects | `fillClick(buf: []f32)` |
+| Configuration | `SAMPLE_RATE` (44.1kHz) |
 
 > [!NOTE]
-> `sound.zig` provides a pure mathematical, zero-heap virtual analog synthesizer that compiles perfectly to freestanding WASM targets with **zero dynamic allocations** or external library requirements.
+> `sound.zig` provides clean, mathematical, zero-heap synthesizer functions designed to pre-render lightweight UI sound effects directly into a static WASM buffer with **zero dynamic allocations**.
