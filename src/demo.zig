@@ -2,6 +2,7 @@ const std = @import("std");
 const dom = @import("dom.zig");
 const colour = @import("colour.zig");
 const canvas = @import("canvas.zig");
+const sound = @import("sound.zig");
 
 // ------------------------------------------------------------------------------------------------
 // Resources & Constants
@@ -10,7 +11,7 @@ const canvas = @import("canvas.zig");
 // ------------------------------------------------------------------------------------------------
 const body_style = @embedFile("bodystyle.css");
 const dommie_text = @embedFile("zigdom.txt");
-const VERSION = "0.0.1a";
+const VERSION = "0.0.1b";
 const NAME = "Zigdom Demo";
 
 // ------------------------------------------------------------------------------------------------
@@ -25,6 +26,10 @@ var article_element: dom.Handle = dom.INVALID;
 var aside_element: dom.Handle = dom.INVALID;
 var canvas_one_time: u32 = 0;
 var grid_offset: f64 = 0.0;
+
+// Synthesizer State & Static Audio Buffer
+var global_synth: sound.Synth = .{};
+var audio_buffer: [4096]f32 = undefined;
 
 // ------------------------------------------------------------------------------------------------
 // CSS class / size options for addRandomParagraph
@@ -671,4 +676,18 @@ export fn zig_init() void {
 
     // Start the rAF loop — callback 3 fires once per browser frame.
     dom.startAnimationLoop(3);
+}
+
+// ------------------------------------------------------------------------------------------------
+// Audio Stream Export
+// ------------------------------------------------------------------------------------------------
+/// Exported audio generation hook. JS Web Audio ScriptProcessorNode invokes this
+/// to dynamically render the next block of 1980s synth soundtrack samples.
+export fn zig_fill_audio_buffer(len: usize) [*]const f32 {
+    const clamp_len = @min(len, audio_buffer.len);
+    var i: usize = 0;
+    while (i < clamp_len) : (i += 1) {
+        audio_buffer[i] = global_synth.nextSample();
+    }
+    return &audio_buffer;
 }

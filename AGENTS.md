@@ -42,13 +42,15 @@ This project uses Git. See .gitignore for excluded files.
 - **`src/dom.zig`**: Low-level browser DOM and Context 2D bindings. Communicates with JavaScript via integer handles.
 - **`src/colour.zig`**: Color definitions, luminance-weighted grayscale conversions, and fast pseudorandom color generators.
 - **`src/canvas.zig`**: In-memory pixel canvas buffers and drawing primitives (lines, circles, boxes).
-- **`docs/zigdom.js`**: JS-side glue code implementing the handle table, string encoder/decoder, callback table, and direct-memory canvas rendering.
+- **`src/sound.zig`**: Zero-heap virtual analog synthesizer, step sequencer, and echo delay lines.
+- **`docs/zigdom.js`**: JS-side glue code implementing the handle table, string encoder/decoder, callback table, direct-memory canvas, and Web Audio.
 - **`docs/index.html`**: Host page that fetches and instantiates the WASM binary.
 
 ### Data Flow
 - **Handles**: Rather than passing raw pointers to JS DOM elements (which is unsafe and complex in WASM), `dom.zig` uses a `u32` `Handle`. JS maintains an array of live DOM elements (`jsValues`) indexed by these handles.
 - **Strings**: Slices are passed to JS as a `(ptr, len)` pair. JS reads from WASM memory using `TextDecoder` and writes into WASM memory via `TextEncoder`.
 - **Canvas Zero-Copy rendering**: Rather than copying bytes between environment targets, the Canvas passes the raw memory pointer (`pixels.ptr`) and dimensions to JavaScript. JavaScript creates a zero-copy `Uint8ClampedArray` view directly on top of WASM's linear memory buffer (`wasmMemory.buffer`) and displays it instantly via `putImageData`.
+- **Audio Zero-Copy streaming**: Synthesized audio samples reside in a static WASM buffer. JS creates a zero-copy `Float32Array` view directly on top of WASM's linear memory buffer (`wasmMemory.buffer`) and pipes it through a native browser `GainNode` for hardware-accelerated, pop-free volume scaling.
 - **Event Listeners**: JS-registered event listeners call the exported `zig_invoke_callback(cb_id)` function, which dispatches events back to the registered handlers in Zig. This is also used to drive real-time animation cycles using `requestAnimationFrame`.
 
 ## Cache Stability

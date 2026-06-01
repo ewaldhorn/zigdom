@@ -21,6 +21,7 @@ $ZIG build-exe src/demo.zig \
     -O ReleaseSmall \
     --export=zig_init \
     --export=zig_invoke_callback \
+    --export=zig_fill_audio_buffer \
     -femit-bin="${WASM_OUT}"
 
 echo "==> Done. WASM binary: $(wc -c < "${WASM_OUT}") bytes"

@@ -21,13 +21,14 @@ src/
   dom.zig        Core DOM library — low-level JS DOM and Canvas 2D bindings
   canvas.zig     In-memory pixel canvas, Bresenham lines, circles, and shapes
   colour.zig     RGBA colour structures, grayscale conversions, and PRNG
-  demo.zig       Demo entry point (DOM controls + two real-time graphics canvases)
+  sound.zig      Zero-heap 1980s retro synth engine, sequencer, and circular delay
+  demo.zig       Demo entry point (DOM controls, graphics canvases + synth audio export)
   bodystyle.css  CSS embedded into the WASM binary at compile time (@embedFile)
   zigdom.txt     Text embedded into the WASM binary at compile time (@embedFile)
 docs/
   index.html   Page you open in the browser
   styles.css   Page styles
-  zigdom.js    JS glue — handle table, string bridge, direct-memory canvas rendering
+  zigdom.js    JS glue — handle table, string bridge, direct-memory canvas, and Web Audio
   zigdom.wasm  Built binary (see .gitignore)
 ```
 
@@ -55,6 +56,10 @@ Zigdom uses a lightweight JS bridge:
 - **Zero-copy canvas** — The pixel buffer lives inside WASM memory. JS
   creates a `Uint8ClampedArray` view directly on it and calls `putImageData`
   — no copy between Zig and the browser canvas.
+- **Zero-copy audio** — Audio samples are synthesized inside WASM memory. JS
+  creates a `Float32Array` view directly on top of WASM's linear memory buffer,
+  streaming the procedural 1980s synth waves straight to a native, hardware-accelerated
+  Web Audio `GainNode` with zero copying.
 - **No GC** — No hidden allocations, no finalizers. All data lives in
   fixed-size global arrays in the WASM data segment.
 
@@ -162,6 +167,7 @@ zig build-exe src/main.zig \
     -O ReleaseSmall \
     --export=zig_init \
     --export=zig_invoke_callback \
+    --export=zig_fill_audio_buffer \
     -femit-bin=docs/app.wasm
 ```
 
@@ -174,7 +180,7 @@ If you use `zig_set_interaction`, add it to the export list:
 **Flag notes:**
 - `-fno-entry` — skips the C runtime entry point (no `main`).
 - `-rdynamic` — exports all symbols so JS can call `zig_init` and friends.
-- `--export=<fn>` — keeps each exported symbol alive through the linker dead-code pass.
+- `--export=<fn>` — keeps each exported symbol alive through the linker dead-code pass. Useful for keeping `zig_fill_audio_buffer` alive when streaming procedural audio.
 - `-O ReleaseSmall` — optimises for binary size; `ReleaseFast` is also valid.
 
 ## API
@@ -227,6 +233,18 @@ it to the browser canvas in one zero-copy operation.
 > `Point` (`{ x, y: i32 }`) is defined in `canvas.zig`, not `colour.zig`.
 
 > [!NOTE]
-> `randomColour()` and `Colour.convertToGrayscale` use an internal
-> xorshift64 PRNG seeded at 1337. Call `colour.seed(n)` with a non-zero
-> value to get a different random sequence.
+`randomColour()` and `Colour.convertToGrayscale` use an internal
+xorshift64 PRNG seeded at 1337. Call `colour.seed(n)` with a non-zero
+value to get a different random sequence.
+
+### `sound.zig` — Procedural Audio Synth
+
+| Concern | Functions / Types |
+|---|---|
+| Type | `Synth` — `{ current_sample, current_step, ... }` |
+| Triggers | `Synth.triggerBass(midi_note)`, `Synth.triggerArp(midi_note)` |
+| Sample Generation | `Synth.nextSample() f32` |
+| Configuration | `SAMPLE_RATE` (44.1kHz), `BPM` (125.0) |
+
+> [!NOTE]
+> `sound.zig` provides a pure mathematical, zero-heap virtual analog synthesizer that compiles perfectly to freestanding WASM targets with **zero dynamic allocations** or external library requirements.

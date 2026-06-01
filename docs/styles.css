@@ -194,3 +194,109 @@ canvas {
 .large  { font-size: large; }
 .larger { font-size: larger; }
 .xlarge { font-size: x-large; }
+
+/* ---- Soundtrack Toggle Button Neon Styling ---- */
+#audioToggleButton {
+  border-color: var(--glow-magenta);
+  color: var(--glow-magenta);
+  box-shadow: 0 0 6px rgba(255, 0, 180, 0.2);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+#audioToggleButton:hover {
+  background: rgba(255, 0, 180, 0.15);
+  box-shadow: 0 0 16px rgba(255, 0, 180, 0.6);
+  color: #fff;
+  text-shadow: 0 0 4px #fff;
+}
+
+#audioToggleButton.playing {
+  background: rgba(255, 0, 180, 0.25);
+  box-shadow: 0 0 20px rgba(255, 0, 180, 0.8);
+  color: #fff;
+  border-color: #fff;
+  animation: neon-pulse 1.8s infinite alternate;
+}
+
+@keyframes neon-pulse {
+  0% {
+    box-shadow: 0 0 10px rgba(255, 0, 180, 0.5), inset 0 0 5px rgba(255, 0, 180, 0.3);
+  }
+  100% {
+    box-shadow: 0 0 24px rgba(255, 0, 180, 0.9), inset 0 0 10px rgba(255, 0, 180, 0.5);
+  }
+}
+
+/* ---- Volume Slider Styling ---- */
+.volume-control {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  padding: 4px 12px;
+  border-radius: 6px;
+  height: 38px; /* Match standard button height */
+}
+
+#volumeLabel {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--glow-cyan);
+  min-width: 65px;
+  text-align: left;
+}
+
+#volumeSlider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 90px;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--border);
+  outline: none;
+  cursor: pointer;
+  transition: background 0.3s;
+}
+
+#volumeSlider::-webkit-slider-runnable-track {
+  width: 100%;
+  height: 6px;
+  cursor: pointer;
+  background: var(--border);
+  border-radius: 3px;
+}
+
+#volumeSlider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--glow-magenta);
+  cursor: pointer;
+  margin-top: -4px; /* offset vertical alignment */
+  box-shadow: 0 0 8px var(--glow-magenta);
+  transition: transform 0.1s, box-shadow 0.2s;
+}
+
+#volumeSlider::-webkit-slider-thumb:hover {
+  transform: scale(1.25);
+  box-shadow: 0 0 12px var(--glow-magenta);
+}
+
+#volumeSlider::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border: none;
+  border-radius: 50%;
+  background: var(--glow-magenta);
+  cursor: pointer;
+  box-shadow: 0 0 8px var(--glow-magenta);
+  transition: transform 0.1s, box-shadow 0.2s;
+}
+
+#volumeSlider::-moz-range-thumb:hover {
+  transform: scale(1.25);
+  box-shadow: 0 0 12px var(--glow-magenta);
+}

@@ -16,6 +16,11 @@
         <button id="addSomethingButton" type="button">Add Something</button>
         <button id="clearAsideButton" type="button">Clear Aside</button>
         <button id="refreshButton" type="button">Refresh Main Canvas</button>
+        <button id="audioToggleButton" type="button" onclick="toggleAudio()">🔇 Play Soundtrack</button>
+        <div class="volume-control">
+          <span id="volumeLabel">Vol: 20%</span>
+          <input id="volumeSlider" type="range" min="0" max="1" step="0.01" value="0.2" oninput="changeVolume(this.value)" />
+        </div>
       </div>
     </nav>
     <hr />

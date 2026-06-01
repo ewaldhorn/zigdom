@@ -280,6 +280,81 @@
       wasmMemory = wasmExports.memory;
 
       // ------------------------------------------------------------------------------------------
+      // Web Audio API Synth Bridge
+      // ------------------------------------------------------------------------------------------
+      let audioCtx = null;
+      let scriptNode = null;
+      let gainNode = null;
+      let audioPlaying = false;
+      let globalVolume = 0.2;
+
+      globalThis.toggleAudio = function () {
+        if (!audioCtx) {
+          // Initialize AudioContext on user gesture
+          audioCtx = new (window.AudioContext || window.webkitAudioContext)({
+            sampleRate: 44100
+          });
+
+          // Create a mono ScriptProcessorNode with 1024 sample block size
+          scriptNode = audioCtx.createScriptProcessor(1024, 0, 1);
+
+          scriptNode.onaudioprocess = (e) => {
+            const outputBuffer = e.outputBuffer;
+            const channelData = outputBuffer.getChannelData(0);
+
+            if (!audioPlaying) {
+              channelData.fill(0);
+              return;
+            }
+
+            const numSamples = channelData.length;
+
+            // Render next block of samples in WASM
+            const ptr = wasmExports.zig_fill_audio_buffer(numSamples);
+
+            // Zero-copy: wrap WASM linear memory directly
+            const wasmSamples = new Float32Array(wasmMemory.buffer, ptr, numSamples);
+
+            // Copy samples directly into Web Audio output buffer (highly optimized browser internal copy)
+            channelData.set(wasmSamples);
+          };
+
+          // Create standard GainNode for hardware-accelerated volume control
+          gainNode = audioCtx.createGain();
+          gainNode.gain.setValueAtTime(globalVolume, audioCtx.currentTime);
+
+          // Connect ScriptProcessor -> GainNode -> Destination
+          scriptNode.connect(gainNode);
+          gainNode.connect(audioCtx.destination);
+        }
+
+        if (audioCtx.state === "suspended") {
+          audioCtx.resume();
+        }
+
+        audioPlaying = !audioPlaying;
+
+        const btn = document.getElementById("audioToggleButton");
+        if (btn) {
+          btn.innerText = audioPlaying ? "🔊 Mute Soundtrack" : "🔇 Play Soundtrack";
+          btn.classList.toggle("playing", audioPlaying);
+        }
+      };
+
+      globalThis.changeVolume = function (val) {
+        globalVolume = parseFloat(val);
+        if (gainNode && audioCtx) {
+          // Standard: transition gain value at target time to prevent popping/zipper noise
+          gainNode.gain.setValueAtTime(globalVolume, audioCtx.currentTime);
+        }
+        const label = document.getElementById("volumeLabel");
+        if (label) {
+          const pct = Math.round(globalVolume * 100);
+          label.innerText = globalVolume === 0 ? "Vol: OFF" : `Vol: ${pct}%`;
+        }
+      };
+
+      // ------------------------------------------------------------------------------------------
       // Initialize: runs the demo
       // ------------------------------------------------------------------------------------------
       wasmExports.zig_init();
