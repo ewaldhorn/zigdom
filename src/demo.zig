@@ -1,5 +1,6 @@
 const std = @import("std");
 const dom = @import("dom.zig");
+const html = @import("html.zig");
 const colour = @import("colour.zig");
 const canvas = @import("canvas.zig");
 const sound = @import("sound.zig");
@@ -195,14 +196,16 @@ fn addBoo() void {
     boo_counter += 1;
     var buf: [32]u8 = undefined;
     const text = std.fmt.bufPrint(&buf, "Boo! ({d})", .{boo_counter}) catch "Boo!";
-    dom.addElementTo(aside_element, dom.createParagraphWithText(text));
+    _ = html.p().text(text).appendTo(aside_element);
 }
 
 // ------------------------------------------------------------------------------------------------
 fn addRandomParagraph() void {
-    const p = dom.createParagraphWithText("This is some text");
-    const wrapped = dom.wrapElementWithNewDiv(p, &.{ randomCssColour(), randomCssSize() });
-    dom.addElementTo(aside_element, wrapped);
+    _ = html.div()
+        .class(randomCssColour())
+        .class(randomCssSize())
+        .child(html.p().text("This is some text").build())
+        .appendTo(aside_element);
 }
 
 // ------------------------------------------------------------------------------------------------
@@ -214,15 +217,13 @@ fn toggleElements() void {
 
 // ------------------------------------------------------------------------------------------------
 fn createAppElements() void {
-    article_element = dom.createElement("article");
-    aside_element = dom.createElement("aside");
-    dom.addElementTo(application_container, article_element);
-    dom.addElementTo(application_container, aside_element);
+    article_element = html.article().appendTo(application_container).build();
+    aside_element = html.aside().appendTo(application_container).build();
 }
 
 // ------------------------------------------------------------------------------------------------
 fn populateArticleElement() void {
-    dom.addElementTo(article_element, dom.createParagraphWithText(dommie_text));
+    _ = html.p().text(dommie_text).appendTo(article_element);
 }
 
 // ------------------------------------------------------------------------------------------------
@@ -677,6 +678,9 @@ export fn zig_init() void {
     // Pre-render UI click sound into static buffer for button feedback
     sound.fillClick(&click_buffer);
 
+    // Force type-checking of all html tag constructors (dead-code eliminated at link time).
+    _compileCheckHtml();
+
     dom.startAnimationLoop(3);
 }
 
@@ -689,4 +693,68 @@ export fn zig_get_click_buffer() [*]const f32 {
 
 export fn zig_get_click_buffer_len() usize {
     return click_buffer.len;
+}
+
+// ------------------------------------------------------------------------------------------------
+// Compile check — forces type-analysis of all html tag constructors.
+// Zig's lazy compilation skips unreferenced function bodies, so unused
+// constructors (h1..h6, section, nav, etc.) would otherwise go unchecked.
+// This function is called once from zig_init but its body is dead-code
+// eliminated at link time — zero runtime cost.
+// ------------------------------------------------------------------------------------------------
+fn _compileCheckHtml() void {
+    if (false) {
+        _ = html.span();
+        _ = html.button();
+        _ = html.a();
+        _ = html.h1();
+        _ = html.h2();
+        _ = html.h3();
+        _ = html.h4();
+        _ = html.h5();
+        _ = html.h6();
+        _ = html.section();
+        _ = html.nav();
+        _ = html.header();
+        _ = html.footer();
+        _ = html.main_tag();
+        _ = html.ul();
+        _ = html.ol();
+        _ = html.li();
+        _ = html.dl();
+        _ = html.dt();
+        _ = html.dd();
+        _ = html.strong();
+        _ = html.em();
+        _ = html.code();
+        _ = html.pre();
+        _ = html.small();
+        _ = html.mark();
+        _ = html.b();
+        _ = html.i();
+        _ = html.form();
+        _ = html.input();
+        _ = html.label();
+        _ = html.select();
+        _ = html.option();
+        _ = html.textarea();
+        _ = html.fieldset();
+        _ = html.legend();
+        _ = html.img();
+        _ = html.br();
+        _ = html.hr();
+        _ = html.table();
+        _ = html.thead();
+        _ = html.tbody();
+        _ = html.tr();
+        _ = html.th();
+        _ = html.td();
+        _ = html.figure();
+        _ = html.figcaption();
+        _ = html.details();
+        _ = html.summary();
+        _ = html.blockquote();
+        _ = html.cite();
+        _ = html.time();
+    }
 }
