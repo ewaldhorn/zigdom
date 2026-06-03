@@ -216,7 +216,7 @@ pub fn setValue(elem_id: []const u8, key: []const u8, value: []const u8) void {
 
 // ------------------------------------------------------------------------------------------------
 /// Sets a string property on an element by handle.
-pub fn set(self: Handle, comptime key: []const u8, value: []const u8) void {
+pub fn set(self: Handle, key: []const u8, value: []const u8) void {
     dom_set_property_str(self, key.ptr, key.len, value.ptr, value.len);
 }
 

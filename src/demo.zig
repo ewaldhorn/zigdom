@@ -128,6 +128,9 @@ export fn zig_invoke_callback(id: u32) void {
         2 => onRefreshCanvasOneClick(),
         3 => onAnimationTick(),
         4 => onCanvasInteraction(),
+        5 => {
+            dom.log(&.{"Handle-based event listener fired on article element."});
+        },
         else => {},
     }
 }
@@ -141,7 +144,10 @@ fn onAddSomethingClick() void {
 // ------------------------------------------------------------------------------------------------
 fn onClearAsideClick() void {
     if (!is_ready) return;
+    dom.showAlert("Clearing the aside content!");
+    dom.removeClassFrom(aside_element, "showcase-active");
     dom.removeAllChildElementsFrom(aside_element);
+    dom.setFocus("addSomethingButton");
 }
 
 // ------------------------------------------------------------------------------------------------
@@ -196,7 +202,13 @@ fn addBoo() void {
     boo_counter += 1;
     var buf: [32]u8 = undefined;
     const text = std.fmt.bufPrint(&buf, "Boo! ({d})", .{boo_counter}) catch "Boo!";
-    _ = html.p().text(text).appendTo(aside_element);
+    var id_buf: [16]u8 = undefined;
+    const id = std.fmt.bufPrint(&id_buf, "boo-{d}", .{boo_counter}) catch "boo";
+    _ = html.p()
+        .id(id)
+        .attr("data-count", text)
+        .text(text)
+        .appendTo(aside_element);
 }
 
 // ------------------------------------------------------------------------------------------------
@@ -204,7 +216,8 @@ fn addRandomParagraph() void {
     _ = html.div()
         .class(randomCssColour())
         .class(randomCssSize())
-        .child(html.p().text("This is some text").build())
+        .attr("data-random", "yes")
+        .child(html.p().id("random-p").text("This is some text using builder API").build())
         .appendTo(aside_element);
 }
 
@@ -223,7 +236,7 @@ fn createAppElements() void {
 
 // ------------------------------------------------------------------------------------------------
 fn populateArticleElement() void {
-    _ = html.p().text(dommie_text).appendTo(article_element);
+    _ = html.p().id("dommie-text").html(dommie_text).appendTo(article_element);
 }
 
 // ------------------------------------------------------------------------------------------------
@@ -329,6 +342,13 @@ fn performDemoOnCanvasOne() void {
     canvasOne.clearScreen(active_theme.bg);
     canvasOne.colourRectangle(8, 8, w - 16, h - 16, 2, active_theme.panel);
 
+    // State-based pixel demo: setColour + putPixel (corner markers)
+    canvasOne.setColour(active_theme.cyan);
+    canvasOne.putPixel(10, 10);
+    canvasOne.putPixel(w - 11, 10);
+    canvasOne.putPixel(10, h - 11);
+    canvasOne.putPixel(w - 11, h - 11);
+
     drawStarfield(w, horizon, canvas_one_time, active_theme);
     drawRetroSun(@divTrunc(w, 2), horizon - 20, 85, active_theme);
     drawMountainSilhouettes(w, horizon, active_theme);
@@ -396,6 +416,9 @@ fn drawRetroSun(cx: i32, cy: i32, r: i32, t: Theme) void {
 
         canvasOne.colourLine(cx - chord, y, cx + chord, y, c);
     }
+
+    // Outline ring around the retro sun — exercises colourCircle
+    canvasOne.colourCircle(cx, cy, r + 4, t.cyan);
 }
 
 // ------------------------------------------------------------------------------------------------
@@ -506,6 +529,16 @@ fn drawVectorShip(cx: i32, cy: i32, time: u32, t: Theme) void {
     canvasOne.colourLine(scx - 6, scy - 10, scx, scy - 25, t.cyan);
     canvasOne.colourLine(scx + 6, scy - 10, scx, scy - 25, t.cyan);
     canvasOne.colourLine(scx - 6, scy - 10, scx + 6, scy - 10, t.cyan);
+
+    // Demo colourLinePoint + colour.convertToGrayscale + Point type
+    var shadow = t.cyan;
+    shadow.convertToGrayscale();
+    const tri1 = canvas.Point{ .x = scx - 4, .y = scy + flame_len + 4 };
+    const tri2 = canvas.Point{ .x = scx + 4, .y = scy + flame_len + 4 };
+    const tri3 = canvas.Point{ .x = scx, .y = scy + flame_len + 16 };
+    canvasOne.colourLinePoint(tri1, tri2, shadow);
+    canvasOne.colourLinePoint(tri2, tri3, shadow);
+    canvasOne.colourLinePoint(tri1, tri3, shadow);
 }
 
 // ------------------------------------------------------------------------------------------------
@@ -598,7 +631,7 @@ fn updateCanvasTwo() void {
 
     canvasTwo.clearScreen(bg);
 
-    for (&balls) |*ball| {
+    for (&balls, 0..) |*ball, i| {
         ball.vy += gravity;
         ball.x += ball.vx;
         ball.y += ball.vy;
@@ -639,6 +672,11 @@ fn updateCanvasTwo() void {
         // Specular highlight
         const hs: i32 = @intFromFloat(r / 3.0);
         canvasTwo.colourPutPixel(bx - hs, by - hs, colour.Colour.white);
+
+        // First ball gets a decorative border ring — exercises colourBorderCircle
+        if (i == 0) {
+            canvasTwo.colourBorderCircle(bx, by, br + 8, 2, colour.Colour.white);
+        }
     }
 
     canvasTwo.render();
@@ -673,6 +711,55 @@ export fn zig_init() void {
     initBalls();
 
     is_ready = true;
+
+    // ── Canvas pixel readback demo ─────────────────────────────────────────
+    {
+        const px = canvasOne.getPixel(0, 0) orelse colour.Colour.empty;
+        if (!px.isEmpty()) {
+            dom.log(&.{ "Canvas One pixel (0,0): non-empty after render." });
+        }
+    }
+
+    // ── DOM ID-based property access demo (setValue + getString) ───────────
+    dom.setValue("title", "lang", "en");
+    const lang = dom.getString("title", "lang");
+    dom.log(&.{ "dom.getString() on #title:", lang });
+
+    // ── replaceClasses demo on title ────────────────────────────────────────
+    {
+        const title_handle = dom.getElementById("title");
+        if (title_handle != dom.INVALID) {
+            dom.replaceClasses(title_handle, &.{ "demo-title" });
+        }
+    }
+
+    // ── Builder .on() demo ─────────────────────────────────────────────────
+    _ = html.button()
+        .text("Builder .on() demo")
+        .on("click", 0)
+        .appendTo(application_container);
+
+    // ── Handle-based API showcase ──────────────────────────────────────────
+    // Create elements using handle-based API directly (not the builder)
+    const showcase_heading = dom.createParagraphWithText("Handle-based API Showcase");
+    dom.addClassTo(showcase_heading, "boo-header");
+    _ = dom.addElementTo(aside_element, showcase_heading);
+
+    // Exercise dom.set() and dom.get() on an element handle
+    dom.set(showcase_heading, "title", "Created via handle-based dom.set() API");
+    const readback = dom.get(showcase_heading, "title");
+    dom.log(&.{ "dom.get() on showcase heading:", readback });
+
+    // Exercise dom.wrapElementWithNewDiv()
+    const showcase_p = dom.createParagraphWithText("This paragraph was wrapped via dom.wrapElementWithNewDiv()");
+    const wrapped = dom.wrapElementWithNewDiv(showcase_p, &.{ "boo-wrapper" });
+    _ = dom.addElementTo(aside_element, wrapped);
+
+    // Exercise addClassTo on the aside element itself
+    dom.addClassTo(aside_element, "showcase-active");
+
+    // Exercise addEventListener by handle (not by ID)
+    dom.addEventListener(article_element, "click", 5);
 
     // Start the rAF loop — callback 3 fires once per browser frame.
     // Pre-render UI click sound into static buffer for button feedback
