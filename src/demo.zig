@@ -12,7 +12,7 @@ const sound = @import("sound.zig");
 // ------------------------------------------------------------------------------------------------
 const body_style = @embedFile("bodystyle.css");
 const dommie_text = @embedFile("zigdom.txt");
-const VERSION = "0.0.1c";
+const VERSION = "0.0.1d";
 const NAME = "Zigdom Demo";
 
 // ------------------------------------------------------------------------------------------------
@@ -483,12 +483,47 @@ fn drawMountainSilhouettes(w: i32, horizon: i32, t: Theme) void {
 
 // ------------------------------------------------------------------------------------------------
 fn drawLaserGrid(w: i32, h: i32, horizon: i32, scroll_offset: f64, t: Theme) void {
+    const cx_f: f64 = @floatFromInt(@divTrunc(w, 2));
+    const h_f: f64 = @floatFromInt(horizon);
+    const h_range: f64 = @as(f64, @floatFromInt(h - horizon));
+    const curve_phase = @as(f64, @floatFromInt(canvas_one_time)) * 0.003;
+    const curve_amp: f64 = 30.0;
+    const segments: i32 = 12;
+
+    // Curved radial lines — each line split into short segments that follow
+    // a sine path growing with distance from the vanishing point.
     var x: i32 = -120;
     while (x <= w + 120) : (x += 35) {
-        canvasOne.colourLine(@divTrunc(w, 2), horizon, x, h, t.violet);
-        canvasOne.colourLine(@divTrunc(w, 2), horizon + 2, x, h, t.cyan);
+        const ex: f64 = @floatFromInt(x);
+        var s: i32 = 0;
+        while (s < segments) : (s += 1) {
+            const t0 = @as(f64, @floatFromInt(s)) / @as(f64, @floatFromInt(segments));
+            const t1 = @as(f64, @floatFromInt(s + 1)) / @as(f64, @floatFromInt(segments));
+
+            const y0_f = h_f + t0 * h_range;
+            const y1_f = h_f + t1 * h_range;
+
+            // Sine curve that grows with distance from the horizon
+            const c0 = curve_amp * t0 * std.math.sin(t0 * std.math.pi * 2.0 + curve_phase);
+            const c1 = curve_amp * t1 * std.math.sin(t1 * std.math.pi * 2.0 + curve_phase);
+
+            const x0_f = cx_f + (ex - cx_f) * t0 + c0;
+            const x1_f = cx_f + (ex - cx_f) * t1 + c1;
+
+            canvasOne.colourLine(
+                @as(i32, @intFromFloat(x0_f)), @as(i32, @intFromFloat(y0_f)),
+                @as(i32, @intFromFloat(x1_f)), @as(i32, @intFromFloat(y1_f)),
+                t.violet,
+            );
+            canvasOne.colourLine(
+                @as(i32, @intFromFloat(x0_f)), @as(i32, @intFromFloat(y0_f + 2)),
+                @as(i32, @intFromFloat(x1_f)), @as(i32, @intFromFloat(y1_f + 2)),
+                t.cyan,
+            );
+        }
     }
 
+    // Horizontal cross-lines — shifted by the same curve so they follow the road
     var i: f64 = 0.0;
     while (true) {
         const exponent = i + scroll_offset;
@@ -496,8 +531,13 @@ fn drawLaserGrid(w: i32, h: i32, horizon: i32, scroll_offset: f64, t: Theme) voi
         const y = horizon + @as(i32, @intCast(@as(i64, @intFromFloat(dist))));
         if (y >= h - 8) break;
         if (y >= horizon + 8) {
-            canvasOne.colourLine(10, y, w - 10, y, t.violet);
-            canvasOne.colourLine(10, y, w - 10, y, t.magenta);
+            const y_f: f64 = @floatFromInt(y);
+            const prog = (y_f - h_f) / h_range;
+            const c = curve_amp * prog * std.math.sin(prog * std.math.pi * 2.0 + curve_phase);
+            const left = @as(i32, @intFromFloat(@as(f64, @floatFromInt(10)) + c));
+            const right = @as(i32, @intFromFloat(@as(f64, @floatFromInt(w - 10)) + c));
+            canvasOne.colourLine(left, y, right, y, t.violet);
+            canvasOne.colourLine(left, y, right, y, t.magenta);
         }
         i += 1.0;
     }

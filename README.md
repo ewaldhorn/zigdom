@@ -303,7 +303,7 @@ value to get a different random sequence.
 | Configuration | `SAMPLE_RATE` (44.1kHz) |
 
 > [!NOTE]
-> `sound.zig` provides clean, mathematical, zero-heap synthesizer functions designed to pre-render lightweight UI sound effects directly into a static WASM buffer with **zero dynamic allocations**.
+> `sound.zig` now only provides the UI click generator (`fillClick`). The retro soundtrack synthesizer was ported to `docs/synth-worklet.js` (browser AudioWorklet) for dedicated audio-thread performance.
 
 ## License
 
