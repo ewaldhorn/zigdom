@@ -38,6 +38,15 @@ function softClip(x) {
   return x / (1.0 + Math.abs(x));
 }
 
+// Simple xorshift32 PRNG for drum noise synthesis
+function xorshift32(state) {
+  let x = state;
+  x ^= x << 13;
+  x ^= x >>> 17;
+  x ^= x << 5;
+  return x >>> 0;
+}
+
 // ------------------------------------------------------------------------------------------------
 // Envelope Stage
 // ------------------------------------------------------------------------------------------------
@@ -67,6 +76,26 @@ class SynthEngine {
     this.arpEnvAmp = 0.0;
     this.arpEnvStage = EnvStage.IDLE;
 
+    // Voice 3: Kick Drum (sine wave with frequency sweep)
+    this.kickPhase = 0.0;
+    this.kickEnvAmp = 0.0;
+    this.kickEnvStage = EnvStage.IDLE;
+
+    // Voice 4: Snare Drum (tone + noise burst)
+    this.snarePhase = 0.0;
+    this.snareNoiseState = 1;
+    this.snareEnvAmp = 0.0;
+    this.snareEnvStage = EnvStage.IDLE;
+
+    // Voice 5: Hi-hat (differentiated noise for high-pass effect)
+    this.hatNoiseState = 2;
+    this.hatPrevNoise = 0.0;
+    this.hatEnvAmp = 0.0;
+    this.hatEnvStage = EnvStage.IDLE;
+
+    // Drum layering timer (resets on each play start)
+    this.totalElapsed = 0;
+
     // Dotted-eighth echo delay line (approx 360ms delay at 44.1kHz = 15876 samples)
     this.delayBuffer = new Float32Array(16000);
     this.delayWritePtr = 0;
@@ -87,6 +116,20 @@ class SynthEngine {
     this.arpEnvStage = EnvStage.ATTACK;
   }
 
+  triggerKick() {
+    this.kickPhase = 0.0;
+    this.kickEnvStage = EnvStage.ATTACK;
+  }
+
+  triggerSnare() {
+    this.snarePhase = 0.0;
+    this.snareEnvStage = EnvStage.ATTACK;
+  }
+
+  triggerHat() {
+    this.hatEnvStage = EnvStage.ATTACK;
+  }
+
   handleSequencerStep() {
     const stepInChord = this.currentStep % 16;
     const chordIdx = Math.floor(this.currentStep / 16);
@@ -101,6 +144,29 @@ class SynthEngine {
       const isOffbeat = (this.currentStep % 4) === 2;
       const bassNote = isOffbeat ? CHORD_BASS_HIGH[chordIdx] : CHORD_BASS_LOW[chordIdx];
       this.triggerBass(bassNote);
+    }
+
+    // 3. Drum patterns — layered in at 30s and 60s
+    const stepInBar = this.currentStep % 16;
+    if (this.totalElapsed >= 1323000) {       // 30 seconds: Layer 1
+      // Kick on beats 1 and 3 (steps 0, 8)
+      if (stepInBar === 0 || stepInBar === 8) {
+        this.triggerKick();
+      }
+      // Hi-hat on beats 2 and 4 (steps 4, 12)
+      if (stepInBar === 4 || stepInBar === 12) {
+        this.triggerHat();
+      }
+      if (this.totalElapsed >= 2646000) {     // 60 seconds: Layer 2
+        // Snare on beats 2 and 4
+        if (stepInBar === 4 || stepInBar === 12) {
+          this.triggerSnare();
+        }
+        // Extra hi-hat on eighth-note offbeats (steps 2, 6, 10, 14)
+        if (stepInBar === 2 || stepInBar === 6 || stepInBar === 10 || stepInBar === 14) {
+          this.triggerHat();
+        }
+      }
     }
   }
 
@@ -123,6 +189,7 @@ class SynthEngine {
     }
 
     this.currentSample += 1;
+    this.totalElapsed += 1;
 
     // ----------------------------------------------------------------------------------------
     // Render Bass Voice (Detuned Dual-Sawtooth)
@@ -225,9 +292,103 @@ class SynthEngine {
     }
 
     // ----------------------------------------------------------------------------------------
+    // Render Kick Drum (sine wave with frequency sweep)
+    // ----------------------------------------------------------------------------------------
+    let kickOut = 0.0;
+    if (this.kickEnvStage !== EnvStage.IDLE) {
+      // Frequency sweep: 150Hz → 40Hz tied to envelope decay
+      const sweepPos = 1.0 - this.kickEnvAmp;
+      const freq = 150.0 + (40.0 - 150.0) * Math.min(sweepPos, 1.0);
+      this.kickPhase += freq / SAMPLE_RATE;
+      if (this.kickPhase >= 1.0) this.kickPhase -= 1.0;
+      const osc = Math.sin(2.0 * Math.PI * this.kickPhase);
+
+      const attackRate = 1.0 / (0.001 * SAMPLE_RATE);   // 1ms attack
+      const decayRate = 1.0 / (0.300 * SAMPLE_RATE);    // 300ms decay
+
+      switch (this.kickEnvStage) {
+        case EnvStage.ATTACK:
+          this.kickEnvAmp += attackRate;
+          if (this.kickEnvAmp >= 1.0) { this.kickEnvAmp = 1.0; this.kickEnvStage = EnvStage.DECAY; }
+          break;
+        case EnvStage.DECAY:
+          this.kickEnvAmp -= decayRate;
+          if (this.kickEnvAmp <= 0.0) { this.kickEnvAmp = 0.0; this.kickEnvStage = EnvStage.IDLE; }
+          break;
+        default:
+          break;
+      }
+      kickOut = osc * this.kickEnvAmp;
+    }
+
+    // ----------------------------------------------------------------------------------------
+    // Render Snare Drum (200Hz tone + noise burst)
+    // ----------------------------------------------------------------------------------------
+    let snareOut = 0.0;
+    if (this.snareEnvStage !== EnvStage.IDLE) {
+      this.snarePhase += 200.0 / SAMPLE_RATE;
+      if (this.snarePhase >= 1.0) this.snarePhase -= 1.0;
+      const tone = Math.sin(2.0 * Math.PI * this.snarePhase);
+      this.snareNoiseState = xorshift32(this.snareNoiseState);
+      const noise = (this.snareNoiseState & 0x7FFFFFFF) / 0x7FFFFFFF * 2.0 - 1.0;
+
+      const attackRate = 1.0 / (0.001 * SAMPLE_RATE);   // 1ms attack
+      const decayRate = 1.0 / (0.150 * SAMPLE_RATE);    // 150ms decay
+
+      switch (this.snareEnvStage) {
+        case EnvStage.ATTACK:
+          this.snareEnvAmp += attackRate;
+          if (this.snareEnvAmp >= 1.0) { this.snareEnvAmp = 1.0; this.snareEnvStage = EnvStage.DECAY; }
+          break;
+        case EnvStage.DECAY:
+          this.snareEnvAmp -= decayRate;
+          if (this.snareEnvAmp <= 0.0) { this.snareEnvAmp = 0.0; this.snareEnvStage = EnvStage.IDLE; }
+          break;
+        default:
+          break;
+      }
+      snareOut = (tone * 0.5 + noise * 0.5) * this.snareEnvAmp;
+    }
+
+    // ----------------------------------------------------------------------------------------
+    // Render Hi-hat (differentiated noise for high-pass effect)
+    // ----------------------------------------------------------------------------------------
+    let hatOut = 0.0;
+    if (this.hatEnvStage !== EnvStage.IDLE) {
+      this.hatNoiseState = xorshift32(this.hatNoiseState);
+      const noise = (this.hatNoiseState & 0x7FFFFFFF) / 0x7FFFFFFF * 2.0 - 1.0;
+      const hpNoise = noise - this.hatPrevNoise;
+      this.hatPrevNoise = noise;
+
+      const attackRate = 1.0 / (0.001 * SAMPLE_RATE);   // 1ms attack
+      const decayRate = 1.0 / (0.060 * SAMPLE_RATE);    // 60ms decay
+
+      switch (this.hatEnvStage) {
+        case EnvStage.ATTACK:
+          this.hatEnvAmp += attackRate;
+          if (this.hatEnvAmp >= 1.0) { this.hatEnvAmp = 1.0; this.hatEnvStage = EnvStage.DECAY; }
+          break;
+        case EnvStage.DECAY:
+          this.hatEnvAmp -= decayRate;
+          if (this.hatEnvAmp <= 0.0) { this.hatEnvAmp = 0.0; this.hatEnvStage = EnvStage.IDLE; }
+          break;
+        default:
+          break;
+      }
+      hatOut = hpNoise * this.hatEnvAmp;
+    }
+
+    // ----------------------------------------------------------------------------------------
     // Mix & Echo Delay Effect
     // ----------------------------------------------------------------------------------------
-    const mixed = (bassOut * 0.35) + (arpOut * 0.22);
+
+    // Drum volume layering: subtle at 30s, full at 60s
+    const drumVol = (this.totalElapsed >= 2646000) ? 1.0 : (this.totalElapsed >= 1323000 ? 0.35 : 0.0);
+
+    const mixed = (bassOut * 0.32) + (arpOut * 0.20)
+                + (kickOut * 0.40 * drumVol)
+                + (snareOut * 0.22 * drumVol)
+                + (hatOut * 0.10 * drumVol);
 
     // Fetch spatial echo from delay line (3 sixteenth notes = 15876 samples)
     const delaySamples = 15876;
@@ -260,10 +421,11 @@ class SynthWorkletProcessor extends AudioWorkletProcessor {
       switch (msg.type) {
         case 'play':
           this.synth.playing = msg.value;
-          // Reset sequencer on play start for clean loop entry
+          // Reset sequencer and drum timer on play start for clean loop entry
           if (msg.value) {
             this.synth.currentSample = 0;
             this.synth.currentStep = 0;
+            this.synth.totalElapsed = 0;
           }
           break;
       }
