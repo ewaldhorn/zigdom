@@ -35,7 +35,7 @@
   }
 
   // ----------------------------------------------------------------------------------------------
-  // String helpers
+  // String helpers (low-level — require explicit memory argument)
   // ----------------------------------------------------------------------------------------------
 
   // ----------------------------------------------------------------------------------------------
@@ -68,6 +68,20 @@
       let wasmExports;
 
       // ------------------------------------------------------------------------------------------
+      // Convenience helpers that close over wasmMemory — eliminates the
+      // repetitive `readStr(wasmMemory, ptr, len)` at every call site.
+      // ------------------------------------------------------------------------------------------
+      function getStr(ptr, len) {
+        return decoder.decode(new Uint8Array(wasmMemory.buffer, ptr, len));
+      }
+      function putStr(ptr, str, maxLen) {
+        const encoded = encoder.encode(str);
+        const len = maxLen !== undefined ? Math.min(encoded.length, maxLen) : encoded.length;
+        new Uint8Array(wasmMemory.buffer, ptr, len).set(encoded.subarray(0, len));
+        return len;
+      }
+
+      // ------------------------------------------------------------------------------------------
       const importObject = {
         env: {
           // --------------------------------------------------------------------------------------
@@ -75,14 +89,12 @@
           // --------------------------------------------------------------------------------------
 
           dom_get_global: (ptr, len) => {
-            const val = globalThis[readStr(wasmMemory, ptr, len)];
+            const val = globalThis[getStr(ptr, len)];
             return (val !== undefined && val !== null) ? getHandle(val) : 0;
           },
 
           dom_get_property: (handle, keyPtr, keyLen) => {
-            return getHandle(
-              jsValues[handle][readStr(wasmMemory, keyPtr, keyLen)],
-            );
+            return getHandle(jsValues[handle][getStr(keyPtr, keyLen)]);
           },
 
           // --------------------------------------------------------------------------------------
@@ -90,9 +102,7 @@
           // --------------------------------------------------------------------------------------
 
           dom_create_element: (tagPtr, tagLen) => {
-            return getHandle(
-              document.createElement(readStr(wasmMemory, tagPtr, tagLen)),
-            );
+            return getHandle(document.createElement(getStr(tagPtr, tagLen)));
           },
 
           // --------------------------------------------------------------------------------------
@@ -108,55 +118,43 @@
           },
 
           dom_set_inner_text: (elem, ptr, len) => {
-            jsValues[elem].innerText = readStr(wasmMemory, ptr, len);
+            jsValues[elem].innerText = getStr(ptr, len);
           },
 
           dom_set_inner_html: (elem, ptr, len) => {
-            jsValues[elem].innerHTML = readStr(wasmMemory, ptr, len);
+            jsValues[elem].innerHTML = getStr(ptr, len);
           },
 
-          dom_set_property_str: (
-            elem,
-            keyPtr,
-            keyLen,
-            valPtr,
-            valLen,
-          ) => {
-            jsValues[elem][readStr(wasmMemory, keyPtr, keyLen)] = readStr(
-              wasmMemory,
-              valPtr,
-              valLen,
-            );
+          dom_set_property_str: (elem, keyPtr, keyLen, valPtr, valLen) => {
+            jsValues[elem][getStr(keyPtr, keyLen)] = getStr(valPtr, valLen);
           },
 
           dom_get_property_str: (elem, keyPtr, keyLen, outPtr, outLen) => {
-            const key = readStr(wasmMemory, keyPtr, keyLen);
+            const key = getStr(keyPtr, keyLen);
             const val = String(jsValues[elem][key]);
-            return writeStr(wasmMemory, outPtr, val, outLen);
+            return putStr(outPtr, val, outLen);
           },
 
           dom_set_class_name: (elem, ptr, len) => {
-            jsValues[elem].className = readStr(wasmMemory, ptr, len);
+            jsValues[elem].className = getStr(ptr, len);
           },
 
           dom_class_list_add: (elem, ptr, len) => {
-            jsValues[elem].classList.add(readStr(wasmMemory, ptr, len));
+            jsValues[elem].classList.add(getStr(ptr, len));
           },
 
           dom_class_list_remove: (elem, ptr, len) => {
-            jsValues[elem].classList.remove(readStr(wasmMemory, ptr, len));
+            jsValues[elem].classList.remove(getStr(ptr, len));
           },
 
           dom_class_list_contains: (elem, ptr, len) => {
-            return jsValues[elem].classList.contains(
-              readStr(wasmMemory, ptr, len),
-            )
+            return jsValues[elem].classList.contains(getStr(ptr, len))
               ? 1
               : 0;
           },
 
           dom_set_display: (elem, ptr, len) => {
-            jsValues[elem].style.display = readStr(wasmMemory, ptr, len);
+            jsValues[elem].style.display = getStr(ptr, len);
           },
 
           dom_call_focus: (elem) => {
@@ -164,9 +162,7 @@
           },
 
           dom_get_element_by_id: (ptr, len) => {
-            const el = document.getElementById(
-              readStr(wasmMemory, ptr, len),
-            );
+            const el = document.getElementById(getStr(ptr, len));
             return el ? getHandle(el) : 0;
           },
 
@@ -177,7 +173,7 @@
           dom_add_style_element: (ptr, len) => {
             const style = document.createElement("style");
             style.type = "text/css";
-            style.innerHTML = readStr(wasmMemory, ptr, len);
+            style.innerHTML = getStr(ptr, len);
             document.head.appendChild(style);
           },
 
@@ -186,7 +182,7 @@
           // --------------------------------------------------------------------------------------
 
           dom_add_event_listener: (elem, eventPtr, eventLen, cbId) => {
-            const event = readStr(wasmMemory, eventPtr, eventLen);
+            const event = getStr(eventPtr, eventLen);
             jsValues[elem].addEventListener(event, () => {
               wasmExports.zig_invoke_callback(cbId);
             });
@@ -240,7 +236,7 @@
           },
 
           dom_ctx_fill_style: (ctx, ptr, len) => {
-            jsValues[ctx].fillStyle = readStr(wasmMemory, ptr, len);
+            jsValues[ctx].fillStyle = getStr(ptr, len);
           },
 
           // --------------------------------------------------------------------------------------
@@ -248,11 +244,11 @@
           // --------------------------------------------------------------------------------------
 
           dom_log: (ptr, len) => {
-            console.log(readStr(wasmMemory, ptr, len));
+            console.log(getStr(ptr, len));
           },
 
           dom_alert: (ptr, len) => {
-            alert(readStr(wasmMemory, ptr, len));
+            alert(getStr(ptr, len));
           },
         },
       };
