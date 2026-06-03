@@ -19,6 +19,7 @@ and zero hidden runtime overhead.
 ```
 src/
   dom.zig        Core DOM library — low-level JS DOM and Canvas 2D bindings
+  html.zig       Declarative HTML element builder (chainable, zero-heap)
   canvas.zig     In-memory pixel canvas, Bresenham lines, circles, and shapes
   colour.zig     RGBA colour structures, grayscale conversions, and PRNG
   sound.zig      Zero-heap UI sound effects generator (pre-rendered button click blip)
@@ -72,8 +73,8 @@ Zigdom uses a lightweight JS bridge:
 ## Using in Your Project
 
 Zigdom is designed to be vendored — copy `src/dom.zig` (and optionally
-`src/canvas.zig` / `src/colour.zig`) into your project and point your WASM
-build at them. No package manager step needed.
+`src/html.zig`, `src/canvas.zig`, `src/colour.zig`) into your project
+and point your WASM build at them. No package manager step needed.
 
 ### 1. Add the library
 
@@ -83,7 +84,13 @@ Copy `dom.zig` into your project:
 curl -O https://raw.githubusercontent.com/ewaldhorn/zigdom/main/src/dom.zig
 ```
 
-If you also want the in-memory pixel canvas primitives:
+If you also want the declarative HTML builder:
+
+```bash
+curl -O https://raw.githubusercontent.com/ewaldhorn/zigdom/main/src/html.zig
+```
+
+Or the in-memory pixel canvas primitives:
 
 ```bash
 curl -O https://raw.githubusercontent.com/ewaldhorn/zigdom/main/src/canvas.zig
@@ -98,7 +105,8 @@ git submodule add https://github.com/ewaldhorn/zigdom lib/zigdom
 
 ### 2. Zig code
 
-Import `dom.zig`, call `dom.init()` once at startup, then use the API:
+Import `dom.zig`, call `dom.init()` once at startup, then use the
+low-level API directly:
 
 ```zig
 const dom = @import("dom.zig");
@@ -111,6 +119,26 @@ export fn zig_init() void {
     dom.addToBody(h1);
 }
 ```
+
+Or write it declaratively with the `html.zig` builder:
+
+```zig
+const dom = @import("dom.zig");
+const html = @import("html.zig");
+
+export fn zig_init() void {
+    dom.init();
+
+    _ = html.div()
+        .id("root")
+        .child(html.h1().text("Hello from Zig!").build())
+        .child(html.p().text("Rendered with zigdom.").build())
+        .appendTo(dom.body);
+}
+```
+
+The builder produces the same DOM — both styles use the same handle table
+underneath and can be mixed freely.
 
 If your app responds to DOM events or drives an animation loop, also export
 `zig_invoke_callback`. JS will call it with the numeric ID you registered:
@@ -210,6 +238,28 @@ If you use `zig_set_interaction`, add it to the export list:
 | Animation | `startAnimationLoop` |
 | Utilities | `log`, `showAlert` |
 
+### `html.zig` — Declarative HTML Builder
+
+| Concern | Methods / Constructors |
+|---|---|
+| Builder struct | `Elm.handle` (the dom.Handle), `Elm.init("tag")` |
+| Chain methods | `.id(str)`, `.class(str)`, `.text(str)`, `.html(str)`, `.attr(key,val)`, `.child(handle)`, `.appendTo(handle)`, `.on(event, cb_id)`, `.build()` |
+| Structural tags | `div()`, `span()`, `p()`, `button()`, `a()` |
+| Headings | `h1()`–`h6()` |
+| Semantic | `article()`, `aside()`, `section()`, `nav()`, `header()`, `footer()`, `main_tag()` |
+| Lists | `ul()`, `ol()`, `li()`, `dl()`, `dt()`, `dd()` |
+| Inline text | `strong()`, `em()`, `code()`, `pre()`, `small()`, `mark()`, `b()`, `i()` |
+| Form | `form()`, `input()`, `label()`, `select()`, `option()`, `textarea()`, `fieldset()`, `legend()` |
+| Media | `img()`, `br()`, `hr()` |
+| Table | `table()`, `thead()`, `tbody()`, `tr()`, `th()`, `td()` |
+| Misc | `figure()`, `figcaption()`, `details()`, `summary()`, `blockquote()`, `cite()`, `time()` |
+
+> [!NOTE]
+> `.child()` accepts a `dom.Handle` — pass the result of `.build()` from a
+> child sub-tree. `.appendTo()` accepts a parent `dom.Handle` and returns
+> `*const Elm` for further chaining. Use `.on("click", cb_id)` to attach
+> event listeners inline during construction.
+
 ### `canvas.zig` — In-Memory Pixel Canvas
 
 All drawing goes into a WASM-side byte buffer; call `Canvas.render()` to blit
@@ -254,3 +304,7 @@ value to get a different random sequence.
 
 > [!NOTE]
 > `sound.zig` provides clean, mathematical, zero-heap synthesizer functions designed to pre-render lightweight UI sound effects directly into a static WASM buffer with **zero dynamic allocations**.
+
+## License
+
+MIT — see [LICENSE](LICENSE).
