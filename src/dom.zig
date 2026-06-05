@@ -6,8 +6,10 @@ const std = @import("std");
 // ------------------------------------------------------------------------------------------------
 
 // ------------------------------------------------------------------------------------------------
-pub const Handle = u32;
-pub const INVALID: Handle = 0;
+pub const Handle = extern struct {
+    id: u32,
+};
+pub const INVALID = Handle{ .id = 0 };
 
 // ------------------------------------------------------------------------------------------------
 // Global element references (set by init())
@@ -162,7 +164,7 @@ pub fn wrapElementWithNewDiv(element: Handle, classes: []const []const u8) Handl
 // ------------------------------------------------------------------------------------------------
 pub fn hide(id: []const u8) void {
     const elem = dom_get_element_by_id(id.ptr, id.len);
-    if (elem != INVALID) {
+    if (elem.id != INVALID.id) {
         const none_val = "none";
         dom_set_display(elem, none_val.ptr, none_val.len);
     }
@@ -171,7 +173,7 @@ pub fn hide(id: []const u8) void {
 // ------------------------------------------------------------------------------------------------
 pub fn show(id: []const u8) void {
     const elem = dom_get_element_by_id(id.ptr, id.len);
-    if (elem != INVALID) {
+    if (elem.id != INVALID.id) {
         const block_val = "block";
         dom_set_display(elem, block_val.ptr, block_val.len);
     }
@@ -180,7 +182,7 @@ pub fn show(id: []const u8) void {
 // ------------------------------------------------------------------------------------------------
 pub fn setFocus(id: []const u8) void {
     const elem = dom_get_element_by_id(id.ptr, id.len);
-    if (elem != INVALID) {
+    if (elem.id != INVALID.id) {
         dom_call_focus(elem);
     }
 }
@@ -197,7 +199,7 @@ pub fn setFocus(id: []const u8) void {
 /// functions (e.g., `getString` or `Handle.get`), you MUST copy/clone the slice.
 pub fn getString(elem_id: []const u8, key: []const u8) []const u8 {
     const elem = dom_get_element_by_id(elem_id.ptr, elem_id.len);
-    if (elem == INVALID) return "";
+    if (elem.id == INVALID.id) return "";
     const actual_len = dom_get_property_str(elem, key.ptr, key.len, &scratch, scratch.len);
     return scratch[0..@min(actual_len, scratch.len)];
 }
@@ -205,7 +207,7 @@ pub fn getString(elem_id: []const u8, key: []const u8) []const u8 {
 // ------------------------------------------------------------------------------------------------
 pub fn setValue(elem_id: []const u8, key: []const u8, value: []const u8) void {
     const elem = dom_get_element_by_id(elem_id.ptr, elem_id.len);
-    if (elem != INVALID) {
+    if (elem.id != INVALID.id) {
         dom_set_property_str(elem, key.ptr, key.len, value.ptr, value.len);
     }
 }
@@ -270,14 +272,14 @@ pub fn replaceClasses(self: Handle, classes: []const []const u8) void {
 /// Adds a CSS class to an element looked up by its DOM id attribute.
 pub fn addClass(elem_id: []const u8, class: []const u8) void {
     const elem = dom_get_element_by_id(elem_id.ptr, elem_id.len);
-    if (elem != INVALID) dom_class_list_add(elem, class.ptr, class.len);
+    if (elem.id != INVALID.id) dom_class_list_add(elem, class.ptr, class.len);
 }
 
 // ------------------------------------------------------------------------------------------------
 /// Removes a CSS class from an element looked up by its DOM id attribute.
 pub fn removeClass(elem_id: []const u8, class: []const u8) void {
     const elem = dom_get_element_by_id(elem_id.ptr, elem_id.len);
-    if (elem != INVALID) dom_class_list_remove(elem, class.ptr, class.len);
+    if (elem.id != INVALID.id) dom_class_list_remove(elem, class.ptr, class.len);
 }
 
 // ------------------------------------------------------------------------------------------------
@@ -299,7 +301,7 @@ pub fn addEventListener(elem: Handle, event: []const u8, cb_id: u32) void {
 /// Convenience: look up element by ID, then add event listener.
 pub fn addEventListenerById(id: []const u8, event: []const u8, cb_id: u32) void {
     const elem = dom_get_element_by_id(id.ptr, id.len);
-    if (elem != INVALID) {
+    if (elem.id != INVALID.id) {
         dom_add_event_listener(elem, event.ptr, event.len, cb_id);
     }
 }

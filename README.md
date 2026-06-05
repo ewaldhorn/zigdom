@@ -250,7 +250,7 @@ export fn zig_set_interaction(x: i32, y: i32) void {
 Zigdom uses a lightweight JS bridge:
 
 - **Handle table** — JS stores references to live DOM elements in an array.
-  Zig passes integer handles (`u32`) instead of raw pointers.
+  Zig passes type-safe handles (an `extern struct` wrapping a `u32` ID) instead of raw pointers.
 - **String bridge** — Strings are passed as `(ptr, len)` pairs into WASM
   linear memory. JS reads/writes via `TextDecoder`/`TextEncoder`.
 - **Callback table** — Zig exports `zig_invoke_callback(u32)`. JS event

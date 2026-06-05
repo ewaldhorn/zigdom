@@ -41,6 +41,7 @@ This project uses Git. See .gitignore for excluded files.
 
 ### Key Modules
 - **`src/dom.zig`**: Low-level browser DOM and Context 2D bindings. Communicates with JavaScript via integer handles.
+- **`src/html.zig`**: Declarative HTML element builder providing a chainable builder (`Elm`) and tag constructors to construct DOM elements in Zig without dynamic heap allocations.
 - **`src/colour.zig`**: Color definitions, luminance-weighted grayscale conversions, and fast pseudorandom color generators.
 - **`src/canvas.zig`**: In-memory pixel canvas buffers and drawing primitives (lines, circles, boxes).
 - **`src/sound.zig`**: Zero-heap sound effects generator. Pre-renders the UI click sound buffer for low-latency, hardware-accelerated playback.
@@ -49,7 +50,7 @@ This project uses Git. See .gitignore for excluded files.
 - **`docs/index.html`**: Host page that fetches and instantiates the WASM binary.
 
 ### Data Flow
-- **Handles**: Rather than passing raw pointers to JS DOM elements (which is unsafe and complex in WASM), `dom.zig` uses a `u32` `Handle`. JS maintains an array of live DOM elements (`jsValues`) indexed by these handles.
+- **Handles**: Rather than passing raw pointers to JS DOM elements (which is unsafe and complex in WASM), `dom.zig` uses a type-safe `extern struct` `Handle` wrapping a `u32` ID. JS maintains an array of live DOM elements (`jsValues`) indexed by these handles.
 - **Strings**: Slices are passed to JS as a `(ptr, len)` pair. JS reads from WASM memory using `TextDecoder` and writes into WASM memory via `TextEncoder`.
 - **Canvas Zero-Copy rendering**: Rather than copying bytes between environment targets, the Canvas passes the raw memory pointer (`pixels.ptr`) and dimensions to JavaScript. JavaScript creates a zero-copy `Uint8ClampedArray` view directly on top of WASM's linear memory buffer (`wasmMemory.buffer`) and displays it instantly via `putImageData`.
 - **Audio Architecture & Zero-Copy streaming**: The retro synth soundtrack has been migrated to a dedicated browser `AudioWorklet` thread (`docs/synth-worklet.js`) to guarantee stutter-free performance independent of main-thread layout or drawing. Short UI sound effects (like the 50ms button click) are pre-rendered into static buffers in WASM (`src/sound.zig`). On the first user interaction, JS creates a zero-copy `Float32Array` view on top of WASM's memory buffer (`wasmMemory.buffer`), copies it directly into a native Web Audio buffer, and triggers it with sub-millisecond, hardware-accelerated latency.

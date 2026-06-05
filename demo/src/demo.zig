@@ -12,7 +12,7 @@ const sound = @import("sound");
 // ------------------------------------------------------------------------------------------------
 const body_style = @embedFile("bodystyle.css");
 const dommie_text = @embedFile("zigdom.txt");
-const VERSION = "0.0.1e";
+const VERSION = "0.0.1f";
 const NAME = "Zigdom Demo";
 
 // ------------------------------------------------------------------------------------------------
@@ -323,7 +323,7 @@ fn setTitle() void {
     var buf: [128]u8 = undefined;
     const title = std.fmt.bufPrint(&buf, "{s} v{s}", .{ NAME, VERSION }) catch "Zigdom Demo";
     const elem = dom.getElementById("title");
-    if (elem != dom.INVALID) dom.setInnerText(elem, title);
+    if (elem.id != dom.INVALID.id) dom.setInnerText(elem, title);
 }
 
 // ------------------------------------------------------------------------------------------------
@@ -590,13 +590,17 @@ fn drawLaserGrid(w: i32, h: i32, horizon: i32, scroll_offset: f64, t: Theme) voi
             const x1_f = cx_f + (ex - cx_f) * t1 + c1;
 
             canvasOne.colourLine(
-                @as(i32, @intFromFloat(x0_f)), @as(i32, @intFromFloat(y0_f)),
-                @as(i32, @intFromFloat(x1_f)), @as(i32, @intFromFloat(y1_f)),
+                @as(i32, @intFromFloat(x0_f)),
+                @as(i32, @intFromFloat(y0_f)),
+                @as(i32, @intFromFloat(x1_f)),
+                @as(i32, @intFromFloat(y1_f)),
                 t.violet,
             );
             canvasOne.colourLine(
-                @as(i32, @intFromFloat(x0_f)), @as(i32, @intFromFloat(y0_f + 2)),
-                @as(i32, @intFromFloat(x1_f)), @as(i32, @intFromFloat(y1_f + 2)),
+                @as(i32, @intFromFloat(x0_f)),
+                @as(i32, @intFromFloat(y0_f + 2)),
+                @as(i32, @intFromFloat(x1_f)),
+                @as(i32, @intFromFloat(y1_f + 2)),
                 t.cyan,
             );
         }
@@ -773,7 +777,6 @@ fn updateCanvasTwo() void {
             ball.y = h - r;
             ball.vy = -@abs(ball.vy) * dampen;
         }
-
     }
 
     // ── Ball-to-ball collision (elastic, equal mass) ─────────────────────────
@@ -879,7 +882,7 @@ export fn zig_init() void {
     {
         const px = canvasOne.getPixel(0, 0) orelse colour.Colour.empty;
         if (!px.isEmpty()) {
-            dom.log(&.{ "Canvas One pixel (0,0): non-empty after render." });
+            dom.log(&.{"Canvas One pixel (0,0): non-empty after render."});
         }
     }
 
@@ -891,8 +894,8 @@ export fn zig_init() void {
     // ── replaceClasses demo on title ────────────────────────────────────────
     {
         const title_handle = dom.getElementById("title");
-        if (title_handle != dom.INVALID) {
-            dom.replaceClasses(title_handle, &.{ "demo-title" });
+        if (title_handle.id != dom.INVALID.id) {
+            dom.replaceClasses(title_handle, &.{"demo-title"});
         }
     }
 
@@ -915,7 +918,7 @@ export fn zig_init() void {
 
     // Exercise dom.wrapElementWithNewDiv()
     const showcase_p = dom.createParagraphWithText("This paragraph was wrapped via dom.wrapElementWithNewDiv()");
-    const wrapped = dom.wrapElementWithNewDiv(showcase_p, &.{ "boo-wrapper" });
+    const wrapped = dom.wrapElementWithNewDiv(showcase_p, &.{"boo-wrapper"});
     _ = dom.addElementTo(aside_element, wrapped);
 
     // Exercise addClassTo on the aside element itself
