@@ -164,12 +164,13 @@ Include them in your HTML and load your WASM binary with the built-in
 ### Step 5: Build
 
 ```bash
-zig build -Doptimize=ReleaseSmall
+zig build
 ```
 
+The demo builds with `ReleaseSmall` for a compact WASM binary (~24 KB).
 Your WASM binary lands in `zig-out/bin/` by default. If you need it elsewhere
-(like `docs/`), copy `demo/build.zig`'s install step or add your own
-`b.addInstallBinFile(...)` call.
+(like `docs/`), copy `demo/build.zig`'s install step or adapt the install
+step in your own `build.zig`.
 
 ---
 

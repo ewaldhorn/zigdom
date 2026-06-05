@@ -278,7 +278,7 @@
       wasmMemory = wasmExports.memory;
 
       // ------------------------------------------------------------------------------------------
-      // Web Audio API Synth Bridge (AudioWorkletNode — runs on dedicated audio thread)
+      // Web Audio API (shared volume control for synth soundtrack + UI sounds)
       // ------------------------------------------------------------------------------------------
       let audioCtx = null;
       let synthNode = null;
@@ -286,30 +286,65 @@
       let audioPlaying = false;
       let globalVolume = 0.2;
 
-      globalThis.toggleAudio = async function () {
+      // ------------------------------------------------------------------------------------------
+      function ensureAudioCtx() {
         if (!audioCtx) {
-          // Initialize AudioContext on user gesture
           audioCtx = new (window.AudioContext || window.webkitAudioContext)();
         }
+        return audioCtx;
+      }
+
+      // ------------------------------------------------------------------------------------------
+      function ensureGainNode() {
+        const ctx = ensureAudioCtx();
+        if (!gainNode) {
+          gainNode = ctx.createGain();
+          gainNode.gain.setValueAtTime(globalVolume, ctx.currentTime);
+          gainNode.connect(ctx.destination);
+        }
+        return gainNode;
+      }
+
+      // ------------------------------------------------------------------------------------------
+      function updateVolumeUI() {
+        const slider = document.getElementById("volumeSlider");
+        const label = document.getElementById("volumeLabel");
+        if (slider) slider.value = globalVolume;
+        if (label) {
+          const pct = Math.round(globalVolume * 100);
+          label.innerText = globalVolume === 0 ? "Vol: OFF" : `Vol: ${pct}%`;
+        }
+      }
+
+      // ------------------------------------------------------------------------------------------
+      function applyVolume() {
+        if (gainNode && audioCtx) {
+          gainNode.gain.setValueAtTime(globalVolume, audioCtx.currentTime);
+        }
+      }
+
+      // ------------------------------------------------------------------------------------------
+      function adjustVolume(delta) {
+        globalVolume = Math.max(0, Math.min(1, Math.round((globalVolume + delta) * 100) / 100));
+        applyVolume();
+        updateVolumeUI();
+      }
+
+      // ------------------------------------------------------------------------------------------
+      globalThis.toggleAudio = async function () {
+        const ctx = ensureAudioCtx();
 
         if (!synthNode) {
           // Load the AudioWorkletProcessor module (dedicated audio thread)
-          await audioCtx.audioWorklet.addModule('synth-worklet.js');
+          await ctx.audioWorklet.addModule('synth-worklet.js');
 
-          // Create the synth AudioWorkletNode
-          synthNode = new AudioWorkletNode(audioCtx, 'synth-worklet');
-
-          // Create standard GainNode for hardware-accelerated volume control
-          gainNode = audioCtx.createGain();
-          gainNode.gain.setValueAtTime(globalVolume, audioCtx.currentTime);
-
-          // Connect AudioWorkletNode -> GainNode -> Destination
-          synthNode.connect(gainNode);
-          gainNode.connect(audioCtx.destination);
+          // Create the synth AudioWorkletNode and connect through shared gain
+          synthNode = new AudioWorkletNode(ctx, 'synth-worklet');
+          synthNode.connect(ensureGainNode());
         }
 
-        if (audioCtx.state === "suspended") {
-          await audioCtx.resume();
+        if (ctx.state === "suspended") {
+          await ctx.resume();
         }
 
         audioPlaying = !audioPlaying;
@@ -324,17 +359,11 @@
         }
       };
 
+      // ------------------------------------------------------------------------------------------
       globalThis.changeVolume = function (val) {
         globalVolume = parseFloat(val);
-        if (gainNode && audioCtx) {
-          // Standard: transition gain value at target time to prevent popping/zipper noise
-          gainNode.gain.setValueAtTime(globalVolume, audioCtx.currentTime);
-        }
-        const label = document.getElementById("volumeLabel");
-        if (label) {
-          const pct = Math.round(globalVolume * 100);
-          label.innerText = globalVolume === 0 ? "Vol: OFF" : `Vol: ${pct}%`;
-        }
+        applyVolume();
+        updateVolumeUI();
       };
 
       // ------------------------------------------------------------------------------------------
@@ -343,12 +372,9 @@
       let clickAudioBuffer = null; // AudioBuffer, created lazily on first click
 
       globalThis.playClickSound = function () {
-        // Lazy AudioContext (always called from user gesture, so autoplay policy OK)
-        if (!audioCtx) {
-          audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        }
-        if (audioCtx.state === "suspended") {
-          audioCtx.resume();
+        const ctx = ensureAudioCtx();
+        if (ctx.state === "suspended") {
+          ctx.resume();
         }
 
         // Lazy AudioBuffer creation from pre-rendered WASM samples
@@ -356,13 +382,13 @@
           const ptr = wasmExports.zig_get_click_buffer();
           const len = wasmExports.zig_get_click_buffer_len();
           const samples = new Float32Array(wasmMemory.buffer, ptr, len);
-          clickAudioBuffer = audioCtx.createBuffer(1, len, 44100);
+          clickAudioBuffer = ctx.createBuffer(1, len, 44100);
           clickAudioBuffer.copyToChannel(samples, 0);
         }
 
-        const source = audioCtx.createBufferSource();
+        const source = ctx.createBufferSource();
         source.buffer = clickAudioBuffer;
-        source.connect(audioCtx.destination);
+        source.connect(ensureGainNode()); // route through shared volume gain
         source.start();
       };
 
@@ -377,6 +403,25 @@
       ['addSomethingButton', 'clearAsideButton', 'refreshButton'].forEach(function (id) {
         const btn = document.getElementById(id);
         if (btn) btn.addEventListener('click', playClickSound);
+      });
+
+      // ------------------------------------------------------------------------------------------
+      // Arrow key volume control (↑ = +1%, ↓ = −1%)
+      // ------------------------------------------------------------------------------------------
+      document.addEventListener('keydown', function (e) {
+        if (e.key === 'ArrowUp') {
+          e.preventDefault();
+          adjustVolume(+0.01);
+        } else if (e.key === 'ArrowDown') {
+          e.preventDefault();
+          adjustVolume(-0.01);
+        } else if (e.code === 'Space') {
+          // Easter egg: crash cymbal accent
+          if (synthNode && synthNode.port) {
+            e.preventDefault();
+            synthNode.port.postMessage({ type: 'crash' });
+          }
+        }
       });
 
       // ------------------------------------------------------------------------------------------

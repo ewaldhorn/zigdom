@@ -195,6 +195,66 @@ canvas {
 .larger { font-size: larger; }
 .xlarge { font-size: x-large; }
 
+/* ---- Aside element variants ---- */
+.aside-note {
+  font-size: 0.82rem;
+  padding: 4px 8px;
+  margin: 4px 0;
+  border-left: 3px solid var(--glow-cyan);
+  border-radius: 2px;
+  background: rgba(0,240,220,0.04);
+  transition: border-color 0.3s;
+}
+.aside-note.blue   { border-left-color: #4488ff; }
+.aside-note.red    { border-left-color: #ff4466; }
+.aside-note.orange { border-left-color: #ff9900; }
+
+.aside-tag {
+  display: inline-block;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  padding: 2px 8px;
+  margin: 3px 2px;
+  border-radius: 10px;
+  border: 1px solid;
+  background: rgba(0,240,220,0.06);
+  text-transform: lowercase;
+}
+.aside-tag.blue   { border-color: #4488ff; color: #6699ff; }
+.aside-tag.red    { border-color: #ff4466; color: #ff6688; }
+.aside-tag.orange { border-color: #ff9900; color: #ffbb44; }
+
+.aside-quip {
+  font-style: italic;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  padding: 4px 8px 4px 16px;
+  margin: 4px 0;
+  position: relative;
+  opacity: 0.85;
+}
+.aside-quip::before {
+  content: "\201C";
+  position: absolute;
+  left: 0;
+  top: 2px;
+  font-size: 1.2rem;
+  color: var(--glow-magenta);
+  opacity: 0.5;
+}
+
+.boo-header {
+  font-size: 0.85rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--glow-magenta);
+  margin: 6px 0 4px;
+  padding-bottom: 2px;
+  border-bottom: 1px solid rgba(255,0,180,0.15);
+}
+
 /* ---- Soundtrack Toggle Button Neon Styling ---- */
 #audioToggleButton {
   border-color: var(--glow-magenta);

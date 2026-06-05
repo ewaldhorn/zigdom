@@ -12,7 +12,7 @@ const sound = @import("sound");
 // ------------------------------------------------------------------------------------------------
 const body_style = @embedFile("bodystyle.css");
 const dommie_text = @embedFile("zigdom.txt");
-const VERSION = "0.0.1d";
+const VERSION = "0.0.1e";
 const NAME = "Zigdom Demo";
 
 // ------------------------------------------------------------------------------------------------
@@ -32,9 +32,36 @@ var grid_offset: f64 = 0.0;
 var click_buffer: [2205]f32 = undefined;
 
 // ------------------------------------------------------------------------------------------------
-// CSS class / size options for addRandomParagraph
+// CSS class / size options for aside element generators
 const css_colours = [_][]const u8{ "red", "blue", "orange" };
 const css_sizes = [_][]const u8{ "large", "larger", "xlarge" };
+
+// ------------------------------------------------------------------------------------------------
+// Random text pools for aside content
+const facts = [_][]const u8{
+    "WASM runs at near-native speed.",
+    "Zig has no hidden control flow.",
+    "First website: info.cern.ch (1991).",
+    "Zig's comptime is Turing-complete.",
+    "A kilobyte of RAM cost ~$3M in 1957.",
+    "The first computer bug was a real moth.",
+};
+const quips = [_][]const u8{
+    "Stay awhile and listen.",
+    "All these worlds are yours.",
+    "It was a pleasure to burn.",
+    "The sky above the port…",
+    "So long, and thanks for all the fish.",
+    "I'm sorry, Dave.",
+};
+const tags = [_][]const u8{
+    "zig",
+    "wasm",
+    "no-alloc",
+    "comptime",
+    "retro",
+    "synthwave",
+};
 
 // ------------------------------------------------------------------------------------------------
 // Demo-local PRNG (xorshift64*) — independent of colour.zig's PRNG.
@@ -138,13 +165,20 @@ export fn zig_invoke_callback(id: u32) void {
 // ------------------------------------------------------------------------------------------------
 fn onAddSomethingClick() void {
     if (!is_ready) return;
-    if (nextRandom() % 2 == 0) addBoo() else addRandomParagraph();
+    const roll = nextRandom() % 5;
+    switch (roll) {
+        0 => addBoo(),
+        1 => addRandomParagraph(),
+        2 => addAsideNote(),
+        3 => addAsideTag(),
+        4 => addAsideQuip(),
+        else => addBoo(),
+    }
 }
 
 // ------------------------------------------------------------------------------------------------
 fn onClearAsideClick() void {
     if (!is_ready) return;
-    dom.showAlert("Clearing the aside content!");
     dom.removeClassFrom(aside_element, "showcase-active");
     dom.removeAllChildElementsFrom(aside_element);
     dom.setFocus("addSomethingButton");
@@ -218,6 +252,51 @@ fn addRandomParagraph() void {
         .class(randomCssSize())
         .attr("data-random", "yes")
         .child(html.p().id("random-p").text("This is some text using builder API").build())
+        .appendTo(aside_element);
+}
+
+// ------------------------------------------------------------------------------------------------
+/// Adds a coloured note card with a random fact.
+fn addAsideNote() void {
+    const idx = nextRandom() % facts.len;
+    var id_buf: [16]u8 = undefined;
+    const id = std.fmt.bufPrint(&id_buf, "note-{d}", .{boo_counter}) catch "note";
+    _ = html.div()
+        .class("aside-note")
+        .class(randomCssColour())
+        .id(id)
+        .text(facts[idx])
+        .appendTo(aside_element);
+}
+
+// ------------------------------------------------------------------------------------------------
+/// Adds a small inline tag/badge with a random label.
+fn addAsideTag() void {
+    const idx = nextRandom() % tags.len;
+    var id_buf: [16]u8 = undefined;
+    const id = std.fmt.bufPrint(&id_buf, "tag-{d}", .{boo_counter}) catch "tag";
+    _ = html.span()
+        .class("aside-tag")
+        .class(randomCssColour())
+        .id(id)
+        .text(tags[idx])
+        .appendTo(aside_element);
+    // Also append a non-breaking space so tags don't glue together
+    _ = html.span()
+        .text(" ")
+        .appendTo(aside_element);
+}
+
+// ------------------------------------------------------------------------------------------------
+/// Adds a styled quotation line.
+fn addAsideQuip() void {
+    const idx = nextRandom() % quips.len;
+    var id_buf: [16]u8 = undefined;
+    const id = std.fmt.bufPrint(&id_buf, "quip-{d}", .{boo_counter}) catch "quip";
+    _ = html.div()
+        .class("aside-quip")
+        .id(id)
+        .text(quips[idx])
         .appendTo(aside_element);
 }
 
@@ -342,12 +421,12 @@ fn performDemoOnCanvasOne() void {
     canvasOne.clearScreen(active_theme.bg);
     canvasOne.colourRectangle(8, 8, w - 16, h - 16, 2, active_theme.panel);
 
-    // State-based pixel demo: setColour + putPixel (corner markers)
+    // State-based pixel demo: setColour + putPixel (top corner markers)
     canvasOne.setColour(active_theme.cyan);
     canvasOne.putPixel(10, 10);
     canvasOne.putPixel(w - 11, 10);
-    canvasOne.putPixel(10, h - 11);
-    canvasOne.putPixel(w - 11, h - 11);
+    canvasOne.putPixel(10, 10);
+    canvasOne.putPixel(w - 11, 10);
 
     drawStarfield(w, horizon, canvas_one_time, active_theme);
     drawRetroSun(@divTrunc(w, 2), horizon - 20, 85, active_theme);
@@ -666,12 +745,12 @@ fn updateCanvasTwo() void {
     const w: f32 = @floatFromInt(canvasTwo.width);
     const h: f32 = @floatFromInt(canvasTwo.height);
     const gravity: f32 = 0.08;
-    const dampen: f32 = 0.88;
+    const dampen: f32 = 0.95;
     const bg = colour.Colour{ .r = 8, .g = 8, .b = 15, .a = 255 };
 
     canvasTwo.clearScreen(bg);
 
-    for (&balls, 0..) |*ball, i| {
+    for (&balls) |*ball| {
         ball.vy += gravity;
         ball.x += ball.vx;
         ball.y += ball.vy;
@@ -695,9 +774,53 @@ fn updateCanvasTwo() void {
             ball.vy = -@abs(ball.vy) * dampen;
         }
 
+    }
+
+    // ── Ball-to-ball collision (elastic, equal mass) ─────────────────────────
+    {
+        var i: usize = 0;
+        while (i < MAX_BALLS) : (i += 1) {
+            var j: usize = i + 1;
+            while (j < MAX_BALLS) : (j += 1) {
+                const ba = &balls[i];
+                const bb = &balls[j];
+                const dx = bb.x - ba.x;
+                const dy = bb.y - ba.y;
+                const dist_sq = dx * dx + dy * dy;
+                const min_dist = ba.radius + bb.radius + 1.0;
+
+                if (dist_sq < min_dist * min_dist and dist_sq > 0.0001) {
+                    const dist = @sqrt(dist_sq);
+                    const nx = dx / dist;
+                    const ny = dy / dist;
+
+                    // Separate balls so they don't overlap
+                    const overlap = min_dist - dist;
+                    ba.x -= nx * overlap * 0.5;
+                    ba.y -= ny * overlap * 0.5;
+                    bb.x += nx * overlap * 0.5;
+                    bb.y += ny * overlap * 0.5;
+
+                    // Exchange velocity along collision normal (equal mass)
+                    const dvx = ba.vx - bb.vx;
+                    const dvy = ba.vy - bb.vy;
+                    const dvn = dvx * nx + dvy * ny;
+                    if (dvn > 0) {
+                        ba.vx -= dvn * nx;
+                        ba.vy -= dvn * ny;
+                        bb.vx += dvn * nx;
+                        bb.vy += dvn * ny;
+                    }
+                }
+            }
+        }
+    }
+
+    // ── Render ──────────────────────────────────────────────────────────────
+    for (&balls, 0..) |*ball, i| {
         const bx: i32 = @intFromFloat(ball.x);
         const by: i32 = @intFromFloat(ball.y);
-        const br: i32 = @intFromFloat(r);
+        const br: i32 = @intFromFloat(ball.radius);
 
         // Dim glow halo — floor each channel at 20 so zero-channel balls still glow
         const glow = colour.Colour{
@@ -710,7 +833,7 @@ fn updateCanvasTwo() void {
         canvasTwo.colourFilledCircle(bx, by, br, ball.col);
 
         // Specular highlight
-        const hs: i32 = @intFromFloat(r / 3.0);
+        const hs: i32 = @intFromFloat(ball.radius / 3.0);
         canvasTwo.colourPutPixel(bx - hs, by - hs, colour.Colour.white);
 
         // First ball gets a decorative border ring — exercises colourBorderCircle

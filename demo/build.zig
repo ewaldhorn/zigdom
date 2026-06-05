@@ -5,7 +5,7 @@ pub fn build(b: *std.Build) void {
         .cpu_arch = .wasm32,
         .os_tag = .freestanding,
     });
-    const optimize = b.standardOptimizeOption(.{});
+    const optimize: std.builtin.OptimizeMode = .ReleaseSmall;
 
     // ── Dependency: zigdom library ──────────────────────────────────────────
     const zigdom_dep = b.dependency("zigdom", .{

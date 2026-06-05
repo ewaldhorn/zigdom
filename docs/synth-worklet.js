@@ -93,6 +93,13 @@ class SynthEngine {
     this.hatEnvAmp = 0.0;
     this.hatEnvStage = EnvStage.IDLE;
 
+    // Voice 6: Crash Cymbal (noise burst → bandpass → long decay)
+    this.crashNoiseState = 3;
+    this.crashPrevNoise1 = 0.0;
+    this.crashPrevNoise2 = 0.0;
+    this.crashEnvAmp = 0.0;
+    this.crashEnvStage = EnvStage.IDLE;
+
     // Drum layering timer (resets on each play start)
     this.totalElapsed = 0;
 
@@ -130,6 +137,10 @@ class SynthEngine {
     this.hatEnvStage = EnvStage.ATTACK;
   }
 
+  triggerCrash() {
+    this.crashEnvStage = EnvStage.ATTACK;
+  }
+
   handleSequencerStep() {
     const stepInChord = this.currentStep % 16;
     const chordIdx = Math.floor(this.currentStep / 16);
@@ -165,6 +176,12 @@ class SynthEngine {
         // Extra hi-hat on eighth-note offbeats (steps 2, 6, 10, 14)
         if (stepInBar === 2 || stepInBar === 6 || stepInBar === 10 || stepInBar === 14) {
           this.triggerHat();
+        }
+      }
+      if (this.totalElapsed >= 3969000) {     // 90 seconds: Layer 3
+        // Syncopated snare accents on offbeat eighths (steps 3, 7, 11, 15)
+        if (stepInBar === 3 || stepInBar === 7 || stepInBar === 11 || stepInBar === 15) {
+          this.triggerSnare();
         }
       }
     }
@@ -379,6 +396,39 @@ class SynthEngine {
     }
 
     // ----------------------------------------------------------------------------------------
+    // Render Crash Cymbal (noise → cascaded 2-pole bandpass → long decay)
+    // ----------------------------------------------------------------------------------------
+    let crashOut = 0.0;
+    if (this.crashEnvStage !== EnvStage.IDLE) {
+      // White noise generator into 2-pole bandpass (cascade of HP + LP)
+      this.crashNoiseState = xorshift32(this.crashNoiseState);
+      const noise = (this.crashNoiseState & 0x7FFFFFFF) / 0x7FFFFFFF * 2.0 - 1.0;
+      // First high-pass (differentiator) → removes rumble
+      const hp = noise - this.crashPrevNoise1;
+      this.crashPrevNoise1 = noise;
+      // Second high-pass → pushes energy into the bright shimmer range
+      const hp2 = hp - this.crashPrevNoise2;
+      this.crashPrevNoise2 = hp;
+
+      const attackRate = 1.0 / (0.003 * SAMPLE_RATE);   // 3ms attack
+      const decayRate = 1.0 / (0.800 * SAMPLE_RATE);    // 800ms decay
+
+      switch (this.crashEnvStage) {
+        case EnvStage.ATTACK:
+          this.crashEnvAmp += attackRate;
+          if (this.crashEnvAmp >= 1.0) { this.crashEnvAmp = 1.0; this.crashEnvStage = EnvStage.DECAY; }
+          break;
+        case EnvStage.DECAY:
+          this.crashEnvAmp -= decayRate;
+          if (this.crashEnvAmp <= 0.0) { this.crashEnvAmp = 0.0; this.crashEnvStage = EnvStage.IDLE; }
+          break;
+        default:
+          break;
+      }
+      crashOut = hp2 * this.crashEnvAmp;
+    }
+
+    // ----------------------------------------------------------------------------------------
     // Mix & Echo Delay Effect
     // ----------------------------------------------------------------------------------------
 
@@ -388,7 +438,8 @@ class SynthEngine {
     const mixed = (bassOut * 0.32) + (arpOut * 0.20)
                 + (kickOut * 0.40 * drumVol)
                 + (snareOut * 0.22 * drumVol)
-                + (hatOut * 0.10 * drumVol);
+                + (hatOut * 0.10 * drumVol)
+                + (crashOut * 0.50);
 
     // Fetch spatial echo from delay line (3 sixteenth notes = 15876 samples)
     const delaySamples = 15876;
@@ -426,6 +477,11 @@ class SynthWorkletProcessor extends AudioWorkletProcessor {
             this.synth.currentSample = 0;
             this.synth.currentStep = 0;
             this.synth.totalElapsed = 0;
+          }
+          break;
+        case 'crash':
+          if (this.synth.playing) {
+            this.synth.triggerCrash();
           }
           break;
       }
