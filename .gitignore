@@ -1,2 +1,7 @@
 .codewhale/
 .deepseek/
+zig-out/
+demo/zig-out/
+.zig-cache/
+demo/.zig-cache/
+docs/zigdom.wasm

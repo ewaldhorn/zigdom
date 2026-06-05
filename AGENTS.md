@@ -36,7 +36,7 @@ This project uses Git. See .gitignore for excluded files.
 `zigdom` is a minimal, header-less, dependency-free wrapper around the browser DOM APIs.
 
 ### Entry Points
-- **`src/demo.zig`**: The entry point for the demo application. JS calls `zig_init` upon instantiation. It registers callbacks and updates the page dynamically.
+- **`demo/src/demo.zig`**: The entry point for the demo application. JS calls `zig_init` upon instantiation. It registers callbacks and updates the page dynamically.
 - **`src/dom.zig`**: The library itself. Implements elements creation, styling, and events.
 
 ### Key Modules
@@ -54,6 +54,7 @@ This project uses Git. See .gitignore for excluded files.
 - **Canvas Zero-Copy rendering**: Rather than copying bytes between environment targets, the Canvas passes the raw memory pointer (`pixels.ptr`) and dimensions to JavaScript. JavaScript creates a zero-copy `Uint8ClampedArray` view directly on top of WASM's linear memory buffer (`wasmMemory.buffer`) and displays it instantly via `putImageData`.
 - **Audio Architecture & Zero-Copy streaming**: The retro synth soundtrack has been migrated to a dedicated browser `AudioWorklet` thread (`docs/synth-worklet.js`) to guarantee stutter-free performance independent of main-thread layout or drawing. Short UI sound effects (like the 50ms button click) are pre-rendered into static buffers in WASM (`src/sound.zig`). On the first user interaction, JS creates a zero-copy `Float32Array` view on top of WASM's memory buffer (`wasmMemory.buffer`), copies it directly into a native Web Audio buffer, and triggers it with sub-millisecond, hardware-accelerated latency.
 - **Event Listeners**: JS-registered event listeners call the exported `zig_invoke_callback(cb_id)` function, which dispatches events back to the registered handlers in Zig. This is also used to drive real-time animation cycles using `requestAnimationFrame`.
+- **Build System**: The library is defined via modules in the root `build.zig`, enabling `zig fetch` integration. The demo lives in `demo/` with its own `build.zig` that depends on the parent zigdom package.
 
 ## Cache Stability
 

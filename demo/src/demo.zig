@@ -1,9 +1,9 @@
 const std = @import("std");
-const dom = @import("dom.zig");
-const html = @import("html.zig");
-const colour = @import("colour.zig");
-const canvas = @import("canvas.zig");
-const sound = @import("sound.zig");
+const dom = @import("dom");
+const html = @import("html");
+const colour = @import("colour");
+const canvas = @import("canvas");
+const sound = @import("sound");
 
 // ------------------------------------------------------------------------------------------------
 // Resources & Constants

@@ -1,6 +1,6 @@
 const std = @import("std");
-const dom = @import("dom.zig");
-const colour_mod = @import("colour.zig");
+const dom = @import("dom");
+const colour_mod = @import("colour");
 
 // ------------------------------------------------------------------------------------------------
 pub const Colour = colour_mod.Colour;

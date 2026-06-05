@@ -1,4 +1,4 @@
-const dom = @import("dom.zig");
+const dom = @import("dom");
 
 // ------------------------------------------------------------------------------------------------
 // html.zig — Declarative HTML element builder

@@ -17,21 +17,27 @@ and zero hidden runtime overhead.
 ## Structure
 
 ```
+build.zig           — Library build definition (module graph for zig fetch)
+build.zig.zon       — Package manifest
 src/
-  dom.zig        Core DOM library — low-level JS DOM and Canvas 2D bindings
-  html.zig       Declarative HTML element builder (chainable, zero-heap)
-  canvas.zig     In-memory pixel canvas, Bresenham lines, circles, and shapes
-  colour.zig     RGBA colour structures, grayscale conversions, and PRNG
-  sound.zig      Zero-heap UI sound effects generator (pre-rendered button click blip)
-  demo.zig       Demo entry point (DOM controls, graphics canvases + sound effect export)
-  bodystyle.css  CSS embedded into the WASM binary at compile time (@embedFile)
-  zigdom.txt     Text embedded into the WASM binary at compile time (@embedFile)
+  dom.zig           — Core DOM library — low-level JS DOM and Canvas 2D bindings
+  html.zig          — Declarative HTML element builder (chainable, zero-heap)
+  canvas.zig        — In-memory pixel canvas, Bresenham lines, circles, and shapes
+  colour.zig        — RGBA colour structures, grayscale conversions, and PRNG
+  sound.zig         — Zero-heap UI sound effects generator (pre-rendered button click blip)
+demo/
+  build.zig          — Demo build (depends on parent zigdom library)
+  build.zig.zon      — Demo package manifest
+  src/
+    demo.zig         — Demo entry point (DOM controls, graphics canvases + sound effect export)
+    bodystyle.css    — CSS embedded into the WASM binary at compile time (@embedFile)
+    zigdom.txt       — Text embedded into the WASM binary at compile time (@embedFile)
 docs/
-  index.html       Page you open in the browser
-  styles.css       Page styles
-  zigdom.js        JS glue — handle table, string bridge, direct-memory canvas, and audio control
-  synth-worklet.js Dedicated AudioWorklet processor for the retro soundtrack synth
-  zigdom.wasm      Built binary (see .gitignore)
+  index.html         — Page you open in the browser
+  styles.css         — Page styles
+  zigdom.js          — JS glue — handle table, string bridge, direct-memory canvas, and audio control
+  synth-worklet.js   — Dedicated AudioWorklet processor for the retro soundtrack synth
+  zigdom.wasm        — Built binary (see .gitignore)
 ```
 
 ## Build & Run
@@ -39,11 +45,204 @@ docs/
 Ensure you have **Zig 0.16.0** installed, then run:
 
 ```bash
-./build.sh          # zig build-exe → docs/zigdom.wasm
+./build.sh          # zig build → docs/zigdom.wasm
 ./run.sh            # build + http-server on :9000
 ```
 
 Or serve `docs/` with any static server after building.
+
+## Using in Your Project
+
+### Step 1: Add the dependency
+
+```bash
+zig fetch --save git+https://github.com/ewaldhorn/zigdom
+```
+
+This adds zigdom to your `build.zig.zon`:
+
+```zig
+// in build.zig.zon
+.zigdom = .{
+    .url = "git+https://github.com/ewaldhorn/zigdom",
+    .hash = "...",   // auto-filled by zig fetch
+},
+```
+
+### Step 2: Wire up your `build.zig`
+
+```zig
+const std = @import("std");
+
+pub fn build(b: *std.Build) void {
+    const target = b.resolveTargetQuery(.{
+        .cpu_arch = .wasm32,
+        .os_tag = .freestanding,
+    });
+    const optimize = b.standardOptimizeOption(.{});
+
+    // Fetch the zigdom library modules
+    const zigdom_dep = b.dependency("zigdom", .{
+        .target = target,
+        .optimize = optimize,
+    });
+
+    // Create your WASM executable
+    const exe = b.addExecutable(.{
+        .name = "app",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/main.zig"),
+            .target = target,
+            .optimize = optimize,
+        }),
+    });
+
+    // Import only the modules you need
+    exe.root_module.addImport("dom", zigdom_dep.module("dom"));
+    exe.root_module.addImport("html", zigdom_dep.module("html"));
+
+    // WASM-specific: no main, export all public symbols
+    exe.entry = .disabled;
+    exe.rdynamic = true;
+
+    b.installArtifact(exe);
+}
+```
+
+> [!TIP]
+> You only need to import the modules your code actually uses — `html`,
+> `canvas`, `colour`, and `sound` are optional. Pick what you need.
+
+See [`demo/build.zig`](demo/build.zig) for a complete working example
+(including the install-to-`docs/` pattern).
+
+### Step 3: Write your Zig code
+
+Import modules by name — **not** by file path:
+
+```zig
+const dom = @import("dom");
+const html = @import("html");
+
+export fn zig_init() void {
+    dom.init();   // must be called first
+
+    const h1 = dom.createElement("h1");
+    dom.setInnerText(h1, "Hello from Zig!");
+    dom.addToBody(h1);
+}
+```
+
+> [!WARNING]
+> `getString` and `Handle.get` return slices that point into a shared 4 KB
+> scratch buffer. **Copy the slice if you need it to persist** across
+> multiple string-retrieval calls.
+
+### Step 4: Add the JS glue
+
+zigdom's Zig modules call into JS functions provided by `zigdom.js`. Copy it
+(and optionally `synth-worklet.js` for the retro soundtrack) into your
+project:
+
+```bash
+curl -O https://raw.githubusercontent.com/ewaldhorn/zigdom/main/docs/zigdom.js
+curl -O https://raw.githubusercontent.com/ewaldhorn/zigdom/main/docs/synth-worklet.js
+```
+
+Include them in your HTML and load your WASM binary with the built-in
+`ZigDom.instantiate` helper:
+
+```html
+<script src="zigdom.js"></script>
+<script type="module">
+  ZigDom.instantiate("app.wasm").catch(err => {
+    console.error("Zigdom failed to load:", err);
+  });
+</script>
+```
+
+### Step 5: Build
+
+```bash
+zig build -Doptimize=ReleaseSmall
+```
+
+Your WASM binary lands in `zig-out/bin/` by default. If you need it elsewhere
+(like `docs/`), copy `demo/build.zig`'s install step or add your own
+`b.addInstallBinFile(...)` call.
+
+---
+
+### Using a local path (without `zig fetch`)
+
+If you want to point at a local checkout instead of fetching from GitHub,
+add a path dependency to your `build.zig.zon`:
+
+```zig
+// in build.zig.zon
+.zigdom = .{
+    .path = "../zigdom",
+},
+```
+
+Everything else stays the same — `b.dependency("zigdom", ...)` resolves
+the local path automatically.
+
+### Quick start code
+
+```zig
+const dom = @import("dom");
+
+export fn zig_init() void {
+    dom.init();  // must be called first — captures document/body/head handles
+
+    const h1 = dom.createElement("h1");
+    dom.setInnerText(h1, "Hello from Zig!");
+    dom.addToBody(h1);
+}
+```
+
+Or write it declaratively with the `html` builder:
+
+```zig
+const dom = @import("dom");
+const html = @import("html");
+
+export fn zig_init() void {
+    dom.init();
+
+    _ = html.div()
+        .id("root")
+        .child(html.h1().text("Hello from Zig!").build())
+        .child(html.p().text("Rendered with zigdom.").build())
+        .appendTo(dom.body);
+}
+```
+
+The builder and handle-based API share the same underlying handle table and
+can be mixed freely.
+
+If your app responds to DOM events or drives an animation loop, also export
+`zig_invoke_callback`. JS will call it with the numeric ID you registered:
+
+```zig
+export fn zig_invoke_callback(id: u32) void {
+    switch (id) {
+        0 => myButtonHandler(),
+        1 => myAnimationTick(),
+        else => {},
+    }
+}
+```
+
+If you use `zig_set_interaction` for canvas touch/click coordinates, export
+that function too:
+
+```zig
+export fn zig_set_interaction(x: i32, y: i32) void {
+    // store x, y for the next callback invocation
+}
+```
 
 ## How It Works
 
@@ -70,158 +269,9 @@ Zigdom uses a lightweight JS bridge:
 - **No GC** — No hidden allocations, no finalizers. All data lives in
   fixed-size global arrays in the WASM data segment.
 
-## Using in Your Project
-
-Zigdom is designed to be vendored — copy `src/dom.zig` (and optionally
-`src/html.zig`, `src/canvas.zig`, `src/colour.zig`) into your project
-and point your WASM build at them. No package manager step needed.
-
-### 1. Add the library
-
-Copy `dom.zig` into your project:
-
-```bash
-curl -O https://raw.githubusercontent.com/ewaldhorn/zigdom/main/src/dom.zig
-```
-
-If you also want the declarative HTML builder:
-
-```bash
-curl -O https://raw.githubusercontent.com/ewaldhorn/zigdom/main/src/html.zig
-```
-
-Or the in-memory pixel canvas primitives:
-
-```bash
-curl -O https://raw.githubusercontent.com/ewaldhorn/zigdom/main/src/canvas.zig
-curl -O https://raw.githubusercontent.com/ewaldhorn/zigdom/main/src/colour.zig
-```
-
-Or as a git submodule:
-
-```bash
-git submodule add https://github.com/ewaldhorn/zigdom lib/zigdom
-```
-
-### 2. Zig code
-
-Import `dom.zig`, call `dom.init()` once at startup, then use the
-low-level API directly:
-
-```zig
-const dom = @import("dom.zig");
-
-export fn zig_init() void {
-    dom.init();  // must be called first — captures document/body/head handles
-
-    const h1 = dom.createElement("h1");
-    dom.setInnerText(h1, "Hello from Zig!");
-    dom.addToBody(h1);
-}
-```
-
-Or write it declaratively with the `html.zig` builder:
-
-```zig
-const dom = @import("dom.zig");
-const html = @import("html.zig");
-
-export fn zig_init() void {
-    dom.init();
-
-    _ = html.div()
-        .id("root")
-        .child(html.h1().text("Hello from Zig!").build())
-        .child(html.p().text("Rendered with zigdom.").build())
-        .appendTo(dom.body);
-}
-```
-
-The builder produces the same DOM — both styles use the same handle table
-underneath and can be mixed freely.
-
-If your app responds to DOM events or drives an animation loop, also export
-`zig_invoke_callback`. JS will call it with the numeric ID you registered:
-
-```zig
-export fn zig_invoke_callback(id: u32) void {
-    switch (id) {
-        0 => myButtonHandler(),
-        1 => myAnimationTick(),
-        else => {},
-    }
-}
-```
-
-If you use the `zig_set_interaction` touch/click bridge (for passing canvas
-coordinates to Zig), export that function too:
-
-```zig
-export fn zig_set_interaction(x: i32, y: i32) void {
-    // store x, y for the next callback invocation
-}
-```
-
-> [!WARNING]
-> `getString` and `get` return slices that point into a shared 4 KB scratch
-> buffer. **Do not hold a reference across a second call** to any
-> string-retrieval function — copy the slice if you need it to persist.
-
-### 3. JS glue
-
-`dom.zig` depends on `zigdom.js` at runtime — it provides the handle table,
-string bridge, and event/animation dispatch. Include it in your HTML and load
-the WASM binary using the `ZigDom.instantiate` helper:
-
-```html
-<script src="zigdom.js"></script>
-<script type="module">
-  ZigDom.instantiate("app.wasm").catch(err => {
-    console.error("Zigdom failed to load:", err);
-  });
-</script>
-```
-
-Copy `zigdom.js` and `synth-worklet.js` from this repo:
-
-```bash
-curl -O https://raw.githubusercontent.com/ewaldhorn/zigdom/main/docs/zigdom.js
-curl -O https://raw.githubusercontent.com/ewaldhorn/zigdom/main/docs/synth-worklet.js
-```
-
-### 4. Build
-
-Compile to WASM with the required flags. Export every function that JS needs
-to call directly:
-
-```bash
-zig build-exe src/main.zig \
-    -target wasm32-freestanding \
-    -fno-entry \
-    -rdynamic \
-    -O ReleaseSmall \
-    --export=zig_init \
-    --export=zig_invoke_callback \
-    --export=zig_get_click_buffer \
-    --export=zig_get_click_buffer_len \
-    -femit-bin=docs/app.wasm
-```
-
-If you use `zig_set_interaction`, add it to the export list:
-
-```bash
-    --export=zig_set_interaction \
-```
-
-**Flag notes:**
-- `-fno-entry` — skips the C runtime entry point (no `main`).
-- `-rdynamic` — exports all symbols so JS can call `zig_init` and friends.
-- `--export=<fn>` — keeps each exported symbol alive through the linker dead-code pass. Useful for keeping `zig_fill_audio_buffer` alive when streaming procedural audio.
-- `-O ReleaseSmall` — optimises for binary size; `ReleaseFast` is also valid.
-
 ## API
 
-### `dom.zig` — Core DOM
+### `dom` — Core DOM
 
 | Concern | Functions |
 |---|---|
@@ -238,7 +288,7 @@ If you use `zig_set_interaction`, add it to the export list:
 | Animation | `startAnimationLoop` |
 | Utilities | `log`, `showAlert` |
 
-### `html.zig` — Declarative HTML Builder
+### `html` — Declarative HTML Builder
 
 | Concern | Methods / Constructors |
 |---|---|
@@ -260,7 +310,7 @@ If you use `zig_set_interaction`, add it to the export list:
 > `*const Elm` for further chaining. Use `.on("click", cb_id)` to attach
 > event listeners inline during construction.
 
-### `canvas.zig` — In-Memory Pixel Canvas
+### `canvas` — In-Memory Pixel Canvas
 
 All drawing goes into a WASM-side byte buffer; call `Canvas.render()` to blit
 it to the browser canvas in one zero-copy operation.
@@ -277,7 +327,7 @@ it to the browser canvas in one zero-copy operation.
 | Triangles | `Canvas.triangle` |
 | 2D context | `Canvas.getContext2D` → `Context2D.beginPath`, `.fill`, `.arc`, `.fillStyle` |
 
-### `colour.zig` — Colour Primitives
+### `colour` — Colour Primitives
 
 | Concern | Functions / Types |
 |---|---|
@@ -295,7 +345,7 @@ it to the browser canvas in one zero-copy operation.
 xorshift64 PRNG seeded at 1337. Call `colour.seed(n)` with a non-zero
 value to get a different random sequence.
 
-### `sound.zig` — Zero-Heap Sound Effects
+### `sound` — Zero-Heap Sound Effects
 
 | Concern | Functions / Types |
 |---|---|
