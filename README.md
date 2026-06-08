@@ -14,6 +14,16 @@ Building browser-based dashboards and interactive pages in a systems language is
 satisfying. Zig gives us tight WASM output, compile-time asset embedding (`@embedFile`),
 and zero hidden runtime overhead.
 
+## What is it for
+
+To learn Zig, I often build small little games with it. This library makes it simpler and easier
+for me to do that, as it saves me a lot of setup time for each project.
+
+I've used this to build these:
+- Retro Flyer at https://nofuss.co.za/toys/retro_flyer
+- BlendedFlame at https://nofuss.co.za/toys/zigflame
+- Bouncer at https://nofuss.co.za/toys/bouncer
+
 ## Structure
 
 ```
