@@ -147,7 +147,7 @@ class SynthEngine {
 
     // 1. Trigger the Arpeggiator Lead on every step (sixteenth notes)
     const arpNoteIdx = ARP_PATTERN[stepInChord % ARP_PATTERN.length];
-    const arpNote = CHORD_ARPS[chordIdx][arpNoteIdx];
+    const arpNote = CHORD_ARPS[chordIdx][arpNoteIdx % CHORD_ARPS[chordIdx].length];
     this.triggerArp(arpNote);
 
     // 2. Trigger the driving octave Bass on even steps (eighth notes)
@@ -443,12 +443,13 @@ class SynthEngine {
 
     // Fetch spatial echo from delay line (3 sixteenth notes = 15876 samples)
     const delaySamples = 15876;
-    const readPtr = (this.delayWritePtr + (16000 - delaySamples)) % 16000;
+    const delayCapacity = this.delayBuffer.length;
+    const readPtr = (this.delayWritePtr + (delayCapacity - delaySamples)) % delayCapacity;
     const echo = this.delayBuffer[readPtr];
 
     // Write feedback to circular buffer
     this.delayBuffer[this.delayWritePtr] = mixed + (echo * 0.45);
-    this.delayWritePtr = (this.delayWritePtr + 1) % 16000;
+    this.delayWritePtr = (this.delayWritePtr + 1) % delayCapacity;
 
     // Combine Dry and Wet (echo) signals
     const finalOut = mixed * 0.75 + echo * 0.32;
@@ -469,9 +470,10 @@ class SynthWorkletProcessor extends AudioWorkletProcessor {
     // Listen for control messages from the main thread
     this.port.onmessage = (event) => {
       const msg = event.data;
+      if (typeof msg !== 'object' || msg === null) return;
       switch (msg.type) {
         case 'play':
-          this.synth.playing = msg.value;
+          this.synth.playing = typeof msg.value === 'boolean' ? msg.value : false;
           // Reset sequencer and drum timer on play start for clean loop entry
           if (msg.value) {
             this.synth.currentSample = 0;
@@ -493,6 +495,7 @@ class SynthWorkletProcessor extends AudioWorkletProcessor {
     if (!output || output.length === 0) return true;
 
     const channelData = output[0];
+    if (!channelData || channelData.length === 0) return true;
     const numSamples = channelData.length;
 
     if (!this.synth.playing) {
