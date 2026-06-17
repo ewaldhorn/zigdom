@@ -5,6 +5,8 @@ const colour = @import("colour");
 const canvas = @import("canvas");
 const sound = @import("sound");
 
+extern fn drum_play_hit(track: u32) void;
+
 // ------------------------------------------------------------------------------------------------
 // Resources & Constants
 // ------------------------------------------------------------------------------------------------
@@ -105,11 +107,67 @@ var canvas_two_buffer: [600 * 450 * 4]u8 = undefined;
 var canvasTwo: canvas.Canvas = undefined;
 
 // ------------------------------------------------------------------------------------------------
+// Canvas Three: 512×320 retro drum machine
+var canvas_three_buffer: [512 * 320 * 4]u8 = undefined;
+var canvasThree: canvas.Canvas = undefined;
+
+// ------------------------------------------------------------------------------------------------
 // Ball physics — fixed-size array, no heap.
 // ------------------------------------------------------------------------------------------------
 
 // ------------------------------------------------------------------------------------------------
 const MAX_BALLS = 14;
+
+// ------------------------------------------------------------------------------------------------
+// Drum machine — fixed-size sequencer state, no heap.
+// ------------------------------------------------------------------------------------------------
+
+// ------------------------------------------------------------------------------------------------
+const DRUM_TRACKS = 6;
+const DRUM_STEPS = 16;
+const DRUM_CANVAS_W = 512;
+const DRUM_CANVAS_H = 320;
+const DRUM_GRID_X = 74;
+const DRUM_GRID_Y = 82;
+const DRUM_CELL_W = 24;
+const DRUM_CELL_H = 24;
+const DRUM_CELL_GAP = 3;
+const DRUM_CELL_PITCH_X = DRUM_CELL_W + DRUM_CELL_GAP;
+const DRUM_CELL_PITCH_Y = DRUM_CELL_H + 6;
+
+// ------------------------------------------------------------------------------------------------
+var drum_pattern: [DRUM_TRACKS][DRUM_STEPS]bool = .{
+    .{ true, false, false, false, true, false, false, false, true, false, false, false, true, false, false, false },
+    .{ false, false, false, false, true, false, false, false, false, false, false, false, true, false, false, false },
+    .{ true, false, true, false, true, false, true, false, true, false, true, false, true, false, true, false },
+    .{ false, false, false, false, false, false, false, true, false, false, false, false, false, false, false, true },
+    .{ false, false, false, false, false, false, true, false, false, false, false, false, false, false, true, false },
+    .{ false, true, false, false, false, true, false, false, false, true, false, false, false, true, false, false },
+};
+var drum_current_step: u32 = 0;
+var drum_playing: bool = false;
+var drum_tick: u32 = 0;
+var drum_bpm: u32 = 120;
+var drum_step_accum: u32 = 0;
+
+// ------------------------------------------------------------------------------------------------
+const drum_labels = [_][]const u8{ "K", "SN", "HH", "OH", "CL", "RM" };
+const drum_neon = [DRUM_TRACKS]colour.Colour{
+    .{ .r = 0, .g = 240, .b = 220, .a = 255 },
+    .{ .r = 255, .g = 0, .b = 180, .a = 255 },
+    .{ .r = 255, .g = 230, .b = 0, .a = 255 },
+    .{ .r = 255, .g = 153, .b = 0, .a = 255 },
+    .{ .r = 160, .g = 0, .b = 255, .a = 255 },
+    .{ .r = 0, .g = 255, .b = 100, .a = 255 },
+};
+const drum_dim = [DRUM_TRACKS]colour.Colour{
+    .{ .r = 10, .g = 42, .b = 40, .a = 255 },
+    .{ .r = 42, .g = 0, .b = 30, .a = 255 },
+    .{ .r = 42, .g = 37, .b = 0, .a = 255 },
+    .{ .r = 42, .g = 24, .b = 0, .a = 255 },
+    .{ .r = 26, .g = 0, .b = 48, .a = 255 },
+    .{ .r = 0, .g = 40, .b = 16, .a = 255 },
+};
 
 // ------------------------------------------------------------------------------------------------
 const Ball = struct {
@@ -148,6 +206,10 @@ export fn zig_set_interaction(x: i32, y: i32) void {
 
 // ------------------------------------------------------------------------------------------------
 /// JS calls this from DOM event listeners and the rAF animation loop.
+/// Callback table:
+/// 0 add something, 1 clear aside, 2 refresh canvas one, 3 animation tick,
+/// 4 canvas two interaction, 5 article handle demo, 6 drum pad click,
+/// 7 drum play/pause.
 export fn zig_invoke_callback(id: u32) void {
     switch (id) {
         0 => onAddSomethingClick(),
@@ -158,6 +220,8 @@ export fn zig_invoke_callback(id: u32) void {
         5 => {
             dom.log(&.{"Handle-based event listener fired on article element."});
         },
+        6 => onDrumCanvasClick(),
+        7 => onDrumPlayPause(),
         else => {},
     }
 }
@@ -199,6 +263,7 @@ fn onAnimationTick() void {
 
     performDemoOnCanvasOne();
     updateCanvasTwo();
+    performDemoOnCanvasThree();
 }
 
 // ------------------------------------------------------------------------------------------------
@@ -224,6 +289,68 @@ fn onCanvasInteraction() void {
         const impulse = @min(180.0 / dist, 12.0); // inverse-distance, capped
         ball.vx += (dx / dist) * impulse;
         ball.vy += (dy / dist) * impulse;
+    }
+}
+
+// ------------------------------------------------------------------------------------------------
+fn onDrumCanvasClick() void {
+    if (!is_ready) return;
+    if (interact_x < 0 or interact_y < 0) return;
+    defer {
+        interact_x = -1;
+        interact_y = -1;
+    }
+
+    const rel_x = interact_x - DRUM_GRID_X;
+    const rel_y = interact_y - DRUM_GRID_Y;
+    if (rel_x < 0 or rel_y < 0) return;
+
+    const step_i = @divTrunc(rel_x, DRUM_CELL_PITCH_X);
+    const track_i = @divTrunc(rel_y, DRUM_CELL_PITCH_Y);
+    if (step_i < 0 or step_i >= DRUM_STEPS or track_i < 0 or track_i >= DRUM_TRACKS) return;
+    if (@mod(rel_x, DRUM_CELL_PITCH_X) >= DRUM_CELL_W) return;
+    if (@mod(rel_y, DRUM_CELL_PITCH_Y) >= DRUM_CELL_H) return;
+
+    const track: usize = @intCast(track_i);
+    const step: usize = @intCast(step_i);
+    drum_pattern[track][step] = !drum_pattern[track][step];
+    if (drum_pattern[track][step]) drum_play_hit(@intCast(track));
+}
+
+// ------------------------------------------------------------------------------------------------
+fn onDrumPlayPause() void {
+    if (!is_ready) return;
+    drum_playing = !drum_playing;
+    drum_tick = 0;
+    drum_step_accum = 0;
+    setDrumButtonText();
+    if (drum_playing) playCurrentDrumStep();
+}
+
+// ------------------------------------------------------------------------------------------------
+fn setDrumButtonText() void {
+    const btn = dom.getElementById("drumPlayButton");
+    if (btn.id == dom.INVALID.id) return;
+    dom.setInnerText(btn, if (drum_playing) "⏹ Drum Machine" else "▶ Drum Machine");
+}
+
+// ------------------------------------------------------------------------------------------------
+fn updateDrumSequencer() void {
+    if (!drum_playing) return;
+    drum_tick +%= 1;
+    drum_step_accum +%= drum_bpm;
+    while (drum_step_accum >= 900) {
+        drum_step_accum -= 900;
+        drum_current_step = @mod(drum_current_step + 1, DRUM_STEPS);
+        playCurrentDrumStep();
+    }
+}
+
+// ------------------------------------------------------------------------------------------------
+fn playCurrentDrumStep() void {
+    const step: usize = @intCast(drum_current_step);
+    for (0..DRUM_TRACKS) |track| {
+        if (drum_pattern[track][step]) drum_play_hit(@intCast(track));
     }
 }
 
@@ -849,6 +976,128 @@ fn updateCanvasTwo() void {
 }
 
 // ------------------------------------------------------------------------------------------------
+// CANVAS THREE — Retro Drum Machine (512×320, animated sequencer)
+// ------------------------------------------------------------------------------------------------
+
+// ------------------------------------------------------------------------------------------------
+fn performDemoOnCanvasThree() void {
+    updateDrumSequencer();
+
+    const bg = colour.Colour{ .r = 5, .g = 5, .b = 16, .a = 255 };
+    const panel = colour.Colour{ .r = 12, .g = 12, .b = 34, .a = 255 };
+    const border = colour.Colour{ .r = 0, .g = 240, .b = 220, .a = 255 };
+    const muted = colour.Colour{ .r = 68, .g = 68, .b = 112, .a = 255 };
+    const white = colour.Colour.white;
+
+    canvasThree.clearScreen(bg);
+    canvasThree.colourRectangle(8, 8, DRUM_CANVAS_W - 16, DRUM_CANVAS_H - 16, 2, border);
+    canvasThree.colourRectangle(14, 14, DRUM_CANVAS_W - 28, DRUM_CANVAS_H - 28, 1, panel);
+
+    drawTinyText("DRUM 120 BPM", 26, 26, 2, border);
+    drawTinyText(if (drum_playing) "RUN" else "PAUSE", 400, 26, 2, if (drum_playing) drum_neon[5] else muted);
+
+    var step: usize = 0;
+    while (step < DRUM_STEPS) : (step += 1) {
+        const x = DRUM_GRID_X + @as(i32, @intCast(step)) * DRUM_CELL_PITCH_X;
+        const step_label_y = DRUM_GRID_Y - 24;
+        if (@mod(step, 4) == 0) {
+            canvasThree.colourLine(x - 5, DRUM_GRID_Y - 6, x - 5, DRUM_GRID_Y + DRUM_TRACKS * DRUM_CELL_PITCH_Y - 2, muted);
+        }
+        drawTinyDigit(@intCast(@mod(step + 1, 10)), x + 8, step_label_y, 1, muted);
+    }
+
+    var track: usize = 0;
+    while (track < DRUM_TRACKS) : (track += 1) {
+        const y = DRUM_GRID_Y + @as(i32, @intCast(track)) * DRUM_CELL_PITCH_Y;
+        drawTinyText(drum_labels[track], 24, y + 8, 2, drum_neon[track]);
+        canvasThree.colourFilledCircle(60, y + 12, 4, drum_neon[track]);
+
+        step = 0;
+        while (step < DRUM_STEPS) : (step += 1) {
+            const x = DRUM_GRID_X + @as(i32, @intCast(step)) * DRUM_CELL_PITCH_X;
+            const cell_colour = if (drum_pattern[track][step]) drum_neon[track] else drum_dim[track];
+            canvasThree.colourFilledRectangle(x, y, DRUM_CELL_W, DRUM_CELL_H, cell_colour);
+            canvasThree.colourRectangle(x, y, DRUM_CELL_W, DRUM_CELL_H, 1, panel);
+
+            if (drum_pattern[track][step]) {
+                canvasThree.colourFilledRectangle(x + 5, y + 5, DRUM_CELL_W - 10, DRUM_CELL_H - 10, white);
+                canvasThree.colourFilledRectangle(x + 7, y + 7, DRUM_CELL_W - 14, DRUM_CELL_H - 14, drum_neon[track]);
+            }
+        }
+    }
+
+    const playhead_x = DRUM_GRID_X + @as(i32, @intCast(drum_current_step)) * DRUM_CELL_PITCH_X;
+    canvasThree.colourRectangle(playhead_x - 2, DRUM_GRID_Y - 4, DRUM_CELL_W + 4, DRUM_TRACKS * DRUM_CELL_PITCH_Y - 4, 2, white);
+    canvasThree.colourFilledRectangle(playhead_x + 2, DRUM_GRID_Y + DRUM_TRACKS * DRUM_CELL_PITCH_Y + 4, DRUM_CELL_W - 4, 5, white);
+    canvasThree.render();
+}
+
+// ------------------------------------------------------------------------------------------------
+fn drawTinyText(text: []const u8, x: i32, y: i32, scale: i32, c: colour.Colour) void {
+    var cursor = x;
+    for (text) |ch| {
+        if (ch == ' ') {
+            cursor += 4 * scale;
+        } else {
+            drawTinyGlyph(ch, cursor, y, scale, c);
+            cursor += 4 * scale;
+        }
+    }
+}
+
+// ------------------------------------------------------------------------------------------------
+fn drawTinyDigit(digit: u8, x: i32, y: i32, scale: i32, c: colour.Colour) void {
+    drawTinyGlyph('0' + digit, x, y, scale, c);
+}
+
+// ------------------------------------------------------------------------------------------------
+fn drawTinyGlyph(ch: u8, x: i32, y: i32, scale: i32, c: colour.Colour) void {
+    const rows: [5][]const u8 = switch (ch) {
+        '0' => .{ "111", "101", "101", "101", "111" },
+        '1' => .{ "010", "110", "010", "010", "111" },
+        '2' => .{ "111", "001", "111", "100", "111" },
+        '3' => .{ "111", "001", "111", "001", "111" },
+        '4' => .{ "101", "101", "111", "001", "001" },
+        '5' => .{ "111", "100", "111", "001", "111" },
+        '6' => .{ "111", "100", "111", "101", "111" },
+        '7' => .{ "111", "001", "010", "010", "010" },
+        '8' => .{ "111", "101", "111", "101", "111" },
+        '9' => .{ "111", "101", "111", "001", "111" },
+        'A' => .{ "010", "101", "111", "101", "101" },
+        'B' => .{ "110", "101", "110", "101", "110" },
+        'C' => .{ "111", "100", "100", "100", "111" },
+        'D' => .{ "110", "101", "101", "101", "110" },
+        'E' => .{ "111", "100", "110", "100", "111" },
+        'H' => .{ "101", "101", "111", "101", "101" },
+        'I' => .{ "111", "010", "010", "010", "111" },
+        'K' => .{ "101", "101", "110", "101", "101" },
+        'L' => .{ "100", "100", "100", "100", "111" },
+        'M' => .{ "101", "111", "111", "101", "101" },
+        'N' => .{ "101", "111", "111", "111", "101" },
+        'O' => .{ "111", "101", "101", "101", "111" },
+        'P' => .{ "110", "101", "110", "100", "100" },
+        'R' => .{ "110", "101", "110", "101", "101" },
+        'S' => .{ "111", "100", "111", "001", "111" },
+        'U' => .{ "101", "101", "101", "101", "111" },
+        else => .{ "000", "000", "000", "000", "000" },
+    };
+
+    for (rows, 0..) |row, row_idx| {
+        for (row, 0..) |bit, col_idx| {
+            if (bit == '1') {
+                canvasThree.colourFilledRectangle(
+                    x + @as(i32, @intCast(col_idx)) * scale,
+                    y + @as(i32, @intCast(row_idx)) * scale,
+                    scale,
+                    scale,
+                    c,
+                );
+            }
+        }
+    }
+}
+
+// ------------------------------------------------------------------------------------------------
 // Entry point
 // ------------------------------------------------------------------------------------------------
 
@@ -869,12 +1118,16 @@ export fn zig_init() void {
     dom.addEventListenerById("addSomethingButton", "click", 0);
     dom.addEventListenerById("clearAsideButton", "click", 1);
     dom.addEventListenerById("refreshButton", "click", 2);
+    dom.addEventListenerById("drumPlayButton", "click", 7);
 
     canvasOne = canvas.Canvas.init(800, 600, &canvas_one_buffer, "canvasOneDiv");
     canvasTwo = canvas.Canvas.init(600, 450, &canvas_two_buffer, "canvasTwoDiv");
+    canvasThree = canvas.Canvas.init(DRUM_CANVAS_W, DRUM_CANVAS_H, &canvas_three_buffer, "canvasThreeDiv");
 
     performDemoOnCanvasOne();
     initBalls();
+    performDemoOnCanvasThree();
+    setDrumButtonText();
 
     is_ready = true;
 
@@ -946,6 +1199,24 @@ export fn zig_get_click_buffer() [*]const f32 {
 
 export fn zig_get_click_buffer_len() usize {
     return click_buffer.len;
+}
+
+// ------------------------------------------------------------------------------------------------
+// Drum machine exports — JS can inspect sequencer dimensions and active beats.
+// ------------------------------------------------------------------------------------------------
+export fn zig_drum_is_beat_active(track: u32, step: u32) u32 {
+    if (track >= DRUM_TRACKS or step >= DRUM_STEPS) return 0;
+    const track_idx: usize = @intCast(track);
+    const step_idx: usize = @intCast(step);
+    return if (drum_pattern[track_idx][step_idx]) 1 else 0;
+}
+
+export fn zig_drum_get_track_count() u32 {
+    return DRUM_TRACKS;
+}
+
+export fn zig_drum_get_step_count() u32 {
+    return DRUM_STEPS;
 }
 
 // ------------------------------------------------------------------------------------------------

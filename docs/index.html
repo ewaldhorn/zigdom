@@ -16,6 +16,7 @@
         <button id="addSomethingButton" type="button">Add Something</button>
         <button id="clearAsideButton" type="button">Clear Aside</button>
         <button id="refreshButton" type="button">Refresh Main Canvas</button>
+        <button id="drumPlayButton" type="button" onclick="playClickSound()">▶ Drum Machine</button>
         <button id="audioToggleButton" type="button" onclick="toggleAudio()">🔇 Play Soundtrack</button>
         <div class="volume-control">
           <span id="volumeLabel">Vol: 20%</span>
@@ -35,6 +36,11 @@
     <!-- Canvas Two: interactive ball physics -->
     <div id="canvasTwoDiv" class="canvas-container canvas-interactive" title="Click or tap to push the balls!">
       <div class="canvas-hint">Click or tap to push the balls!</div>
+    </div>
+
+    <!-- Canvas Three: retro drum machine -->
+    <div id="canvasThreeDiv" class="canvas-container canvas-drum" title="Click pads to toggle · Play/Stop to run">
+      <div class="canvas-hint">Click pads to toggle · Play/Stop to run</div>
     </div>
 
     <hr />
