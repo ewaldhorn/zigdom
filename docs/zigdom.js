@@ -240,6 +240,14 @@
           },
 
           // --------------------------------------------------------------------------------------
+          // Drum machine audio import
+          // --------------------------------------------------------------------------------------
+
+          drum_play_hit: (track) => {
+            if (typeof globalThis.drumHit === "function") globalThis.drumHit(track);
+          },
+
+          // --------------------------------------------------------------------------------------
           // Utilities
           // --------------------------------------------------------------------------------------
 
@@ -304,6 +312,47 @@
         }
         return gainNode;
       }
+
+      // ------------------------------------------------------------------------------------------
+      // Drum machine — tone map per track
+      // ------------------------------------------------------------------------------------------
+      const DRUM_FREQS = [60, 200, 8000, 6000, 1200, 400]; // kick, snare, hh-c, hh-o, clap, rim
+      const DRUM_TYPES = ["sine", "triangle", "square", "square", "noise", "noise"];
+
+      function playDrumHit(track) {
+        const ctx = ensureAudioCtx();
+        if (ctx.state === "suspended") {
+          ctx.resume();
+        }
+
+        const gain = ctx.createGain();
+        gain.connect(ensureGainNode());
+        gain.gain.setValueAtTime(0.4, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.08);
+
+        if (DRUM_TYPES[track] === "noise") {
+          const buf = ctx.createBuffer(1, Math.floor(ctx.sampleRate * 0.05), ctx.sampleRate);
+          const data = buf.getChannelData(0);
+          for (let i = 0; i < data.length; i += 1) data[i] = Math.random() * 2 - 1;
+
+          const src = ctx.createBufferSource();
+          src.buffer = buf;
+          src.connect(gain);
+          src.start();
+          src.stop(ctx.currentTime + 0.06);
+          return;
+        }
+
+        const osc = ctx.createOscillator();
+        osc.type = DRUM_TYPES[track] || "sine";
+        osc.frequency.setValueAtTime(DRUM_FREQS[track] || 220, ctx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(20, ctx.currentTime + 0.06);
+        osc.connect(gain);
+        osc.start();
+        osc.stop(ctx.currentTime + 0.1);
+      }
+
+      globalThis.drumHit = playDrumHit;
 
       // ------------------------------------------------------------------------------------------
       function updateVolumeUI() {
@@ -461,6 +510,38 @@
             e.preventDefault();
             const touch = e.touches[0];
             handleInteraction(touch.clientX, touch.clientY);
+          }, { passive: false });
+        }
+      }
+
+      // ------------------------------------------------------------------------------------------
+      // Touch / Click interaction for the drum machine canvas (canvas three).
+      // Reuses Zig's shared interaction-coordinate export and dispatches callback 6.
+      // ------------------------------------------------------------------------------------------
+      const canvasThreeDiv = document.getElementById("canvasThreeDiv");
+      if (canvasThreeDiv) {
+        const drumCanvas = canvasThreeDiv.querySelector("canvas");
+        if (drumCanvas) {
+          function handleDrumInteraction(clientX, clientY) {
+            const rect = drumCanvas.getBoundingClientRect();
+            if (rect.width === 0 || rect.height === 0) return;
+            const scaleX = drumCanvas.width / rect.width;
+            const scaleY = drumCanvas.height / rect.height;
+            const x = Math.round((clientX - rect.left) * scaleX);
+            const y = Math.round((clientY - rect.top) * scaleY);
+            wasmExports.zig_set_interaction(x, y);
+            wasmExports.zig_invoke_callback(6);
+          }
+
+          drumCanvas.addEventListener("mousedown", (e) => {
+            e.preventDefault();
+            handleDrumInteraction(e.clientX, e.clientY);
+          });
+
+          drumCanvas.addEventListener("touchstart", (e) => {
+            e.preventDefault();
+            const touch = e.touches[0];
+            handleDrumInteraction(touch.clientX, touch.clientY);
           }, { passive: false });
         }
       }

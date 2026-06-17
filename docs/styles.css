@@ -173,6 +173,16 @@ canvas {
   cursor: crosshair;
 }
 
+.canvas-drum {
+  border-color: rgba(0, 240, 220, 0.35);
+  box-shadow: 0 0 28px rgba(0, 240, 220, 0.10);
+}
+
+.canvas-drum canvas {
+  cursor: pointer;
+  image-rendering: pixelated;
+}
+
 .canvas-hint {
   font-size: 0.72rem;
   color: var(--glow-magenta);
