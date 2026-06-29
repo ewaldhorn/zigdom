@@ -66,6 +66,7 @@
       // ------------------------------------------------------------------------------------------
       let wasmMemory;
       let wasmExports;
+      let _renderCache = null;   // cached Uint8ClampedArray + ImageData for dom_canvas_render
 
       // ------------------------------------------------------------------------------------------
       // Convenience helpers that close over wasmMemory — eliminates the
@@ -209,10 +210,17 @@
 
           dom_canvas_render: (canvas, ctx, pixelsPtr, width, height) => {
             const ctxEl = jsValues[ctx];
-            // Wrap WASM memory directly without copying!
-            const array = new Uint8ClampedArray(wasmMemory.buffer, pixelsPtr, width * height * 4);
-            const imgData = new ImageData(array, width, height);
-            ctxEl.putImageData(imgData, 0, 0);
+            // Re-use cached view + ImageData; only reallocate if dims, pointer, or WASM buffer changed
+            // (wasmMemory.buffer is replaced when WASM grows memory, detected via reference check)
+            if (!_renderCache ||
+                _renderCache.pixelsPtr        !== pixelsPtr     ||
+                _renderCache.width            !== width         ||
+                _renderCache.height           !== height        ||
+                _renderCache.array.buffer     !== wasmMemory.buffer) {
+              const array = new Uint8ClampedArray(wasmMemory.buffer, pixelsPtr, width * height * 4);
+              _renderCache = { array, imgData: new ImageData(array, width, height), pixelsPtr, width, height };
+            }
+            ctxEl.putImageData(_renderCache.imgData, 0, 0);
           },
 
           dom_start_animation_loop: (cbId) => {
@@ -356,12 +364,11 @@
 
       // ------------------------------------------------------------------------------------------
       function updateVolumeUI() {
-        const slider = document.getElementById("volumeSlider");
-        const label = document.getElementById("volumeLabel");
-        if (slider) slider.value = globalVolume;
-        if (label) {
+        // Uses cached DOM refs (elVolumeSlider / elVolumeLabel) initialised after zig_init()
+        if (elVolumeSlider) elVolumeSlider.value = globalVolume;
+        if (elVolumeLabel) {
           const pct = Math.round(globalVolume * 100);
-          label.innerText = globalVolume === 0 ? "Vol: OFF" : `Vol: ${pct}%`;
+          elVolumeLabel.innerText = globalVolume === 0 ? "Vol: OFF" : `Vol: ${pct}%`;
         }
       }
 
@@ -401,10 +408,10 @@
         // Send play state to the worklet's dedicated audio thread
         synthNode.port.postMessage({ type: 'play', value: audioPlaying });
 
-        const btn = document.getElementById("audioToggleButton");
-        if (btn) {
-          btn.innerText = audioPlaying ? "🔊 Mute Soundtrack" : "🔇 Play Soundtrack";
-          btn.classList.toggle("playing", audioPlaying);
+        // Uses cached DOM ref (elAudioToggleBtn) initialised after zig_init()
+        if (elAudioToggleBtn) {
+          elAudioToggleBtn.innerText = audioPlaying ? "🔊 Mute Soundtrack" : "🔇 Play Soundtrack";
+          elAudioToggleBtn.classList.toggle("playing", audioPlaying);
         }
       };
 
@@ -445,6 +452,16 @@
       // Initialize: runs the demo
       // ------------------------------------------------------------------------------------------
       wasmExports.zig_init();
+
+      // ------------------------------------------------------------------------------------------
+      // Cache stable DOM refs used in repeated callbacks — avoids getElementById on every event.
+      // Declared with var so they are visible to updateVolumeUI / toggleAudio via closure.
+      // ------------------------------------------------------------------------------------------
+      /* eslint-disable no-var */
+      var elVolumeSlider   = document.getElementById("volumeSlider");
+      var elVolumeLabel    = document.getElementById("volumeLabel");
+      var elAudioToggleBtn = document.getElementById("audioToggleButton");
+      /* eslint-enable no-var */
 
       // ------------------------------------------------------------------------------------------
       // Wire click sound to action buttons (skip audioToggleButton — that's the synth)
@@ -489,14 +506,24 @@
           const controls = document.getElementById("controls");
           if (controls) controls.style.display = "flex";
 
+          // Cache scale factors; recompute only on resize, not on every click/touch
+          let physicsScaleX = 1, physicsScaleY = 1;
+          function updatePhysicsScale() {
+            const r = physicsCanvas.getBoundingClientRect();
+            if (r.width > 0 && r.height > 0) {
+              physicsScaleX = physicsCanvas.width / r.width;
+              physicsScaleY = physicsCanvas.height / r.height;
+            }
+          }
+          updatePhysicsScale();
+          new ResizeObserver(updatePhysicsScale).observe(physicsCanvas);
+
           function handleInteraction(clientX, clientY) {
             const rect = physicsCanvas.getBoundingClientRect();
             if (rect.width === 0 || rect.height === 0) return;
-            // Map from CSS pixels to canvas pixel space
-            const scaleX = physicsCanvas.width / rect.width;
-            const scaleY = physicsCanvas.height / rect.height;
-            const x = Math.round((clientX - rect.left) * scaleX);
-            const y = Math.round((clientY - rect.top) * scaleY);
+            // Map from CSS pixels to canvas pixel space (scale factors are cached)
+            const x = Math.round((clientX - rect.left) * physicsScaleX);
+            const y = Math.round((clientY - rect.top) * physicsScaleY);
             wasmExports.zig_set_interaction(x, y);
             wasmExports.zig_invoke_callback(4);
           }
@@ -522,13 +549,24 @@
       if (canvasThreeDiv) {
         const drumCanvas = canvasThreeDiv.querySelector("canvas");
         if (drumCanvas) {
+          // Cache scale factors; recompute only on resize, not on every click/touch
+          let drumScaleX = 1, drumScaleY = 1;
+          function updateDrumScale() {
+            const r = drumCanvas.getBoundingClientRect();
+            if (r.width > 0 && r.height > 0) {
+              drumScaleX = drumCanvas.width / r.width;
+              drumScaleY = drumCanvas.height / r.height;
+            }
+          }
+          updateDrumScale();
+          new ResizeObserver(updateDrumScale).observe(drumCanvas);
+
           function handleDrumInteraction(clientX, clientY) {
             const rect = drumCanvas.getBoundingClientRect();
             if (rect.width === 0 || rect.height === 0) return;
-            const scaleX = drumCanvas.width / rect.width;
-            const scaleY = drumCanvas.height / rect.height;
-            const x = Math.round((clientX - rect.left) * scaleX);
-            const y = Math.round((clientY - rect.top) * scaleY);
+            // Scale factors are cached; only rect.left/top need a live lookup
+            const x = Math.round((clientX - rect.left) * drumScaleX);
+            const y = Math.round((clientY - rect.top) * drumScaleY);
             wasmExports.zig_set_interaction(x, y);
             wasmExports.zig_invoke_callback(6);
           }
