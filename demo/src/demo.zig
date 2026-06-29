@@ -14,7 +14,7 @@ extern fn drum_play_hit(track: u32) void;
 // ------------------------------------------------------------------------------------------------
 const body_style = @embedFile("bodystyle.css");
 const dommie_text = @embedFile("zigdom.txt");
-const VERSION = "0.0.1f";
+const VERSION = "0.0.2";
 const NAME = "Zigdom Demo";
 
 // ------------------------------------------------------------------------------------------------

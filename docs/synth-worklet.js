@@ -491,23 +491,31 @@ class SynthWorkletProcessor extends AudioWorkletProcessor {
   }
 
   process(inputs, outputs, parameters) {
-    const output = outputs[0];
-    if (!output || output.length === 0) return true;
+      try {
+          const output = outputs[0];
+          if (!output || output.length === 0) return true;
 
-    const channelData = output[0];
-    if (!channelData || channelData.length === 0) return true;
-    const numSamples = channelData.length;
+          const channelData = output[0];
+          if (!channelData || channelData.length === 0) return true;
 
-    if (!this.synth.playing) {
-      channelData.fill(0);
+          if (!this.synth.playing) {
+              channelData.fill(0);
+              return true;
+          }
+
+          for (let i = 0; i < channelData.length; i++) {
+              channelData[i] = this.synth.nextSample();
+          }
+
+      } catch (err) {
+          console.error("Synth worklet error:", err);
+
+          // output silence instead of dying
+          const out = outputs[0]?.[0];
+          if (out) out.fill(0);
+      }
+
       return true;
-    }
-
-    for (let i = 0; i < numSamples; i++) {
-      channelData[i] = this.synth.nextSample();
-    }
-
-    return true; // Keep the processor alive
   }
 }
 
